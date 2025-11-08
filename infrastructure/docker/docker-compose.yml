@@ -1,0 +1,210 @@
+services:
+  # PostgreSQL Database
+  postgres:
+    image: postgres:15-alpine
+    container_name: password-manager-db
+    environment:
+      POSTGRES_USER: pm_user
+      POSTGRES_PASSWORD: pm_password
+      POSTGRES_DB: password_manager
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ../database/schema.sql:/docker-entrypoint-initdb.d/schema.sql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U pm_user"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - password-manager-network
+
+  # Redis Cache
+  redis:
+    image: redis:7-alpine
+    container_name: password-manager-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    command: redis-server --appendonly yes
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - password-manager-network
+
+  # API Gateway
+  api-gateway:
+    build:
+      context: ../../backend/api-gateway
+      dockerfile: Dockerfile
+    container_name: password-manager-gateway
+    ports:
+      - "3000:3000"
+    environment:
+      - PORT=3000
+      - ENVIRONMENT=development
+      - AUTH_SERVICE_URL=http://auth-service:3001
+      - VAULT_SERVICE_URL=http://vault-service:3002
+      - SYNC_SERVICE_URL=http://sync-service:3003
+      - SHARING_SERVICE_URL=http://sharing-service:3004
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - REDIS_PASSWORD=
+      - REDIS_DB=0
+      - RATE_LIMIT_ENABLED=true
+      - RATE_LIMIT_REQUESTS=100
+      - RATE_LIMIT_WINDOW=60
+      - LOG_REQUESTS=true
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      auth-service:
+        condition: service_started
+      vault-service:
+        condition: service_started
+      sync-service:
+        condition: service_started
+      sharing-service:
+        condition: service_started
+    networks:
+      - password-manager-network
+
+  # Auth Service
+  auth-service:
+    build:
+      context: ../../backend/auth-service
+      dockerfile: Dockerfile
+    container_name: password-manager-auth
+    ports:
+      - "3001:3001"
+    environment:
+      - PORT=3001
+      - ENVIRONMENT=development
+      - JWT_SECRET=change-me-to-a-secure-random-string-in-production
+      - JWT_EXPIRY_HOURS=24
+      - DB_HOST=postgres
+      - DB_PORT=5432
+      - DB_USER=pm_user
+      - DB_PASSWORD=pm_password
+      - DB_NAME=password_manager
+      - DB_SSLMODE=disable
+      - PBKDF2_ITERATIONS=100000
+      - BCRYPT_COST=12
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - REDIS_PASSWORD=
+      - REDIS_DB=0
+      - RATE_LIMIT_REQUESTS=5
+      - RATE_LIMIT_WINDOW=60
+      - RESET_TOKEN_EXPIRY_MINUTES=30
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - password-manager-network
+
+  # Vault Service
+  vault-service:
+    build:
+      context: ../../backend/vault-service
+      dockerfile: Dockerfile
+    container_name: password-manager-vault
+    ports:
+      - "3002:3002"
+    environment:
+      - PORT=3002
+      - ENVIRONMENT=development
+      - JWT_SECRET=change-me-to-a-secure-random-string-in-production
+      - DB_HOST=postgres
+      - DB_PORT=5432
+      - DB_USER=pm_user
+      - DB_PASSWORD=pm_password
+      - DB_NAME=password_manager
+      - DB_SSLMODE=disable
+    depends_on:
+      postgres:
+        condition: service_healthy
+      auth-service:
+        condition: service_started
+    networks:
+      - password-manager-network
+
+  # Sync Service
+  sync-service:
+    build:
+      context: ../../backend/sync-service
+      dockerfile: Dockerfile
+    container_name: password-manager-sync
+    ports:
+      - "3003:3003"
+    environment:
+      - PORT=3003
+      - ENVIRONMENT=development
+      - JWT_SECRET=change-me-to-a-secure-random-string-in-production
+      - DB_HOST=postgres
+      - DB_PORT=5432
+      - DB_USER=pm_user
+      - DB_PASSWORD=pm_password
+      - DB_NAME=password_manager
+      - DB_SSLMODE=disable
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - REDIS_PASSWORD=
+      - REDIS_DB=0
+      - WS_READ_BUFFER_SIZE=1024
+      - WS_WRITE_BUFFER_SIZE=1024
+      - WS_PONG_WAIT=60
+      - WS_PING_PERIOD=54
+    depends_on:
+      postgres:
+        condition: service_healthy
+      auth-service:
+        condition: service_started
+    networks:
+      - password-manager-network
+
+  # Sharing Service
+  sharing-service:
+    build:
+      context: ../../backend/sharing-service
+      dockerfile: Dockerfile
+    container_name: password-manager-sharing
+    ports:
+      - "3004:3004"
+    environment:
+      - PORT=3004
+      - ENVIRONMENT=development
+      - JWT_SECRET=change-me-to-a-secure-random-string-in-production
+      - DB_HOST=postgres
+      - DB_PORT=5432
+      - DB_USER=pm_user
+      - DB_PASSWORD=pm_password
+      - DB_NAME=password_manager
+      - DB_SSLMODE=disable
+    depends_on:
+      postgres:
+        condition: service_healthy
+      auth-service:
+        condition: service_started
+      vault-service:
+        condition: service_started
+    networks:
+      - password-manager-network
+
+volumes:
+  postgres_data:
+  redis_data:
+
+networks:
+  password-manager-network:
+    driver: bridge
+
