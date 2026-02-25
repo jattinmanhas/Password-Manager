@@ -1,0 +1,20 @@
+# macOS
+.DS_Store
+
+# Env files
+.env
+
+# Logs
+*.log
+
+# Build outputs
+bin/
+dist/
+coverage/
+
+# Node
+node_modules/
+
+# Go
+*.test
+*.out
