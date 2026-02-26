@@ -12,6 +12,8 @@ var (
 	ErrWeakPassword        = errors.New("password does not meet complexity requirements")
 	ErrMFARequired         = errors.New("mfa required")
 	ErrInvalidMFA          = errors.New("invalid totp code")
+	ErrInvalidMFAInput     = errors.New("invalid mfa input")
+	ErrMFARateLimited      = errors.New("mfa attempts rate limited")
 	ErrUnauthorizedSession = errors.New("unauthorized")
 	ErrMissingTOTPSecret   = errors.New("totp secret not configured")
 	ErrNotFound            = errors.New("not found")
@@ -32,12 +34,13 @@ type Session struct {
 }
 
 type LoginInput struct {
-	Email      string
-	Password   string
-	TOTPCode   string
-	DeviceName string
-	IPAddr     string
-	UserAgent  string
+	Email        string
+	Password     string
+	TOTPCode     string
+	RecoveryCode string
+	DeviceName   string
+	IPAddr       string
+	UserAgent    string
 }
 
 type LoginOutput struct {
@@ -62,13 +65,16 @@ type CreateUserInput struct {
 }
 
 type UserAuthRecord struct {
-	UserID       string
-	Email        string
-	Salt         []byte
-	PasswordHash []byte
-	RawParams    []byte
-	TOTPEnabled  bool
-	TOTPSecret   string
+	UserID             string
+	Email              string
+	Salt               []byte
+	PasswordHash       []byte
+	RawParams          []byte
+	TOTPEnabled        bool
+	TOTPSecretEnc      []byte
+	TOTPFailedAttempts int
+	TOTPWindowStart    *time.Time
+	TOTPLockedUntil    *time.Time
 }
 
 type CreateSessionInput struct {
@@ -82,8 +88,11 @@ type CreateSessionInput struct {
 }
 
 type TOTPState struct {
-	Secret  string
-	Enabled bool
+	SecretEnc      []byte
+	Enabled        bool
+	FailedAttempts int
+	WindowStart    *time.Time
+	LockedUntil    *time.Time
 }
 
 type AuthRepository interface {
@@ -92,8 +101,12 @@ type AuthRepository interface {
 	CreateSession(ctx context.Context, input CreateSessionInput) error
 	GetActiveSessionByTokenHash(ctx context.Context, tokenHash []byte) (Session, error)
 	RevokeSessionByTokenHash(ctx context.Context, tokenHash []byte) (bool, error)
-	SetTOTPSecret(ctx context.Context, userID string, secret string) (bool, error)
+	SetTOTPSecret(ctx context.Context, userID string, secretEnc []byte) (bool, error)
 	EnableTOTP(ctx context.Context, userID string) error
 	GetTOTPState(ctx context.Context, userID string) (TOTPState, error)
+	RecordTOTPFailure(ctx context.Context, userID string, now time.Time, maxAttempts int, window time.Duration, lockDuration time.Duration) (*time.Time, error)
+	ResetTOTPFailures(ctx context.Context, userID string) error
+	ReplaceRecoveryCodes(ctx context.Context, userID string, codeHashes [][]byte) error
+	ConsumeRecoveryCode(ctx context.Context, userID string, codeHash []byte) (bool, error)
 	DeleteExpiredSessions(ctx context.Context) (int64, error)
 }

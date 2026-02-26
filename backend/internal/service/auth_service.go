@@ -11,22 +11,31 @@ import (
 )
 
 type AuthService struct {
-	repo       domain.AuthRepository
-	pepper     string
-	sessionTTL time.Duration
-	totpIssuer string
-	now        func() time.Time
+	repo          domain.AuthRepository
+	pepper        string
+	sessionTTL    time.Duration
+	totpIssuer    string
+	totpSecretKey []byte
+	now           func() time.Time
 }
 
 func NewAuthService(repo domain.AuthRepository, pepper string, sessionTTL time.Duration, issuer string) *AuthService {
 	return &AuthService{
-		repo:       repo,
-		pepper:     pepper,
-		sessionTTL: sessionTTL,
-		totpIssuer: issuer,
-		now:        time.Now,
+		repo:          repo,
+		pepper:        pepper,
+		sessionTTL:    sessionTTL,
+		totpIssuer:    issuer,
+		totpSecretKey: util.DeriveTOTPEncryptionKey(pepper),
+		now:           time.Now,
 	}
 }
+
+const (
+	totpMaxAttempts   = 5
+	totpAttemptWindow = 30 * time.Second
+	totpLockDuration  = 5 * time.Minute
+	recoveryCodeCount = 10
+)
 
 func (s *AuthService) Register(ctx context.Context, email string, password string, name string, masterPasswordHint string) (string, error) {
 	normalizedEmail := util.NormalizeEmail(email)
@@ -79,6 +88,11 @@ func (s *AuthService) Login(ctx context.Context, input domain.LoginInput) (domai
 	if normalizedEmail == "" || input.Password == "" {
 		return domain.LoginOutput{}, domain.ErrInvalidCredentials
 	}
+	trimmedTOTPCode := util.TrimOrEmpty(input.TOTPCode)
+	trimmedRecoveryCode := util.TrimOrEmpty(input.RecoveryCode)
+	if trimmedTOTPCode != "" && trimmedRecoveryCode != "" {
+		return domain.LoginOutput{}, domain.ErrInvalidMFAInput
+	}
 
 	record, err := s.repo.GetUserAuthByEmail(ctx, normalizedEmail)
 	if err != nil {
@@ -98,11 +112,37 @@ func (s *AuthService) Login(ctx context.Context, input domain.LoginInput) (domai
 	}
 
 	if record.TOTPEnabled {
-		if input.TOTPCode == "" {
+		nowUTC := s.now().UTC()
+		if s.isMFALocked(record.TOTPLockedUntil, nowUTC) {
+			return domain.LoginOutput{}, domain.ErrMFARateLimited
+		}
+
+		if trimmedTOTPCode == "" && trimmedRecoveryCode == "" {
 			return domain.LoginOutput{}, domain.ErrMFARequired
 		}
-		if !util.VerifyTOTP(record.TOTPSecret, input.TOTPCode, s.now().UTC()) {
-			return domain.LoginOutput{}, domain.ErrInvalidMFA
+
+		if trimmedRecoveryCode != "" {
+			consumed, err := s.repo.ConsumeRecoveryCode(ctx, record.UserID, util.HashRecoveryCode(trimmedRecoveryCode, s.pepper))
+			if err != nil {
+				return domain.LoginOutput{}, fmt.Errorf("consume recovery code: %w", err)
+			}
+			if !consumed {
+				return domain.LoginOutput{}, s.recordMFAFailure(ctx, record.UserID, nowUTC)
+			}
+			if err := s.repo.ResetTOTPFailures(ctx, record.UserID); err != nil {
+				return domain.LoginOutput{}, fmt.Errorf("reset totp failures after recovery code login: %w", err)
+			}
+		} else {
+			secret, err := util.ParseStoredTOTPSecret(record.TOTPSecretEnc, s.totpSecretKey)
+			if err != nil {
+				return domain.LoginOutput{}, fmt.Errorf("decode totp secret: %w", err)
+			}
+			if !util.VerifyTOTP(secret, trimmedTOTPCode, nowUTC) {
+				return domain.LoginOutput{}, s.recordMFAFailure(ctx, record.UserID, nowUTC)
+			}
+			if err := s.repo.ResetTOTPFailures(ctx, record.UserID); err != nil {
+				return domain.LoginOutput{}, fmt.Errorf("reset totp failures: %w", err)
+			}
 		}
 	}
 
@@ -170,7 +210,12 @@ func (s *AuthService) BeginTOTPSetup(ctx context.Context, userID string, email s
 		return domain.TOTPSetup{}, err
 	}
 
-	updated, err := s.repo.SetTOTPSecret(ctx, userID, secret)
+	secretEnc, err := util.EncryptTOTPSecret(secret, s.totpSecretKey)
+	if err != nil {
+		return domain.TOTPSetup{}, fmt.Errorf("encrypt totp secret: %w", err)
+	}
+
+	updated, err := s.repo.SetTOTPSecret(ctx, userID, secretEnc)
 	if err != nil {
 		return domain.TOTPSetup{}, fmt.Errorf("set totp secret: %w", err)
 	}
@@ -184,32 +229,48 @@ func (s *AuthService) BeginTOTPSetup(ctx context.Context, userID string, email s
 	}, nil
 }
 
-func (s *AuthService) EnableTOTP(ctx context.Context, userID string, code string) error {
+func (s *AuthService) EnableTOTP(ctx context.Context, userID string, code string) ([]string, error) {
 	state, err := s.repo.GetTOTPState(ctx, userID)
 	if err != nil {
 		if errors.Is(err, domain.ErrNotFound) {
-			return domain.ErrUnauthorizedSession
+			return nil, domain.ErrUnauthorizedSession
 		}
-		return fmt.Errorf("read totp state: %w", err)
+		return nil, fmt.Errorf("read totp state: %w", err)
 	}
 
-	if state.Secret == "" {
-		return domain.ErrMissingTOTPSecret
+	nowUTC := s.now().UTC()
+	if s.isMFALocked(state.LockedUntil, nowUTC) {
+		return nil, domain.ErrMFARateLimited
 	}
-	if state.Enabled && util.VerifyTOTP(state.Secret, code, s.now().UTC()) {
-		return nil
+
+	secret, err := util.ParseStoredTOTPSecret(state.SecretEnc, s.totpSecretKey)
+	if err != nil {
+		return nil, fmt.Errorf("decode totp secret: %w", err)
 	}
-	if !util.VerifyTOTP(state.Secret, code, s.now().UTC()) {
-		return domain.ErrInvalidMFA
+	if secret == "" {
+		return nil, domain.ErrMissingTOTPSecret
+	}
+
+	if state.Enabled && util.VerifyTOTP(secret, code, nowUTC) {
+		if err := s.repo.ResetTOTPFailures(ctx, userID); err != nil {
+			return nil, fmt.Errorf("reset totp failures: %w", err)
+		}
+		return s.generateAndStoreRecoveryCodes(ctx, userID)
+	}
+	if !util.VerifyTOTP(secret, code, nowUTC) {
+		return nil, s.recordMFAFailure(ctx, userID, nowUTC)
 	}
 
 	if err := s.repo.EnableTOTP(ctx, userID); err != nil {
 		if errors.Is(err, domain.ErrNotFound) {
-			return domain.ErrUnauthorizedSession
+			return nil, domain.ErrUnauthorizedSession
 		}
-		return fmt.Errorf("enable totp: %w", err)
+		return nil, fmt.Errorf("enable totp: %w", err)
 	}
-	return nil
+	if err := s.repo.ResetTOTPFailures(ctx, userID); err != nil {
+		return nil, fmt.Errorf("reset totp failures: %w", err)
+	}
+	return s.generateAndStoreRecoveryCodes(ctx, userID)
 }
 
 func (s *AuthService) VerifyTOTPForSession(ctx context.Context, userID string, code string) error {
@@ -221,11 +282,62 @@ func (s *AuthService) VerifyTOTPForSession(ctx context.Context, userID string, c
 		return fmt.Errorf("read totp state: %w", err)
 	}
 
-	if !state.Enabled || state.Secret == "" {
+	nowUTC := s.now().UTC()
+	if s.isMFALocked(state.LockedUntil, nowUTC) {
+		return domain.ErrMFARateLimited
+	}
+
+	secret, err := util.ParseStoredTOTPSecret(state.SecretEnc, s.totpSecretKey)
+	if err != nil {
+		return fmt.Errorf("decode totp secret: %w", err)
+	}
+
+	if !state.Enabled || secret == "" {
 		return domain.ErrMissingTOTPSecret
 	}
-	if !util.VerifyTOTP(state.Secret, code, s.now().UTC()) {
-		return domain.ErrInvalidMFA
+	if !util.VerifyTOTP(secret, code, nowUTC) {
+		return s.recordMFAFailure(ctx, userID, nowUTC)
+	}
+	if err := s.repo.ResetTOTPFailures(ctx, userID); err != nil {
+		return fmt.Errorf("reset totp failures: %w", err)
 	}
 	return nil
+}
+
+func (s *AuthService) recordMFAFailure(ctx context.Context, userID string, now time.Time) error {
+	lockedUntil, err := s.repo.RecordTOTPFailure(ctx, userID, now, totpMaxAttempts, totpAttemptWindow, totpLockDuration)
+	if err != nil {
+		if errors.Is(err, domain.ErrNotFound) {
+			return domain.ErrUnauthorizedSession
+		}
+		return fmt.Errorf("record totp failure: %w", err)
+	}
+	if s.isMFALocked(lockedUntil, now) {
+		return domain.ErrMFARateLimited
+	}
+	return domain.ErrInvalidMFA
+}
+
+func (s *AuthService) generateAndStoreRecoveryCodes(ctx context.Context, userID string) ([]string, error) {
+	codes, err := util.GenerateRecoveryCodes(recoveryCodeCount)
+	if err != nil {
+		return nil, fmt.Errorf("generate recovery codes: %w", err)
+	}
+
+	hashes := make([][]byte, 0, len(codes))
+	for _, code := range codes {
+		hash := util.HashRecoveryCode(code, s.pepper)
+		copyHash := make([]byte, len(hash))
+		copy(copyHash, hash)
+		hashes = append(hashes, copyHash)
+	}
+
+	if err := s.repo.ReplaceRecoveryCodes(ctx, userID, hashes); err != nil {
+		return nil, fmt.Errorf("store recovery codes: %w", err)
+	}
+	return codes, nil
+}
+
+func (s *AuthService) isMFALocked(lockedUntil *time.Time, now time.Time) bool {
+	return lockedUntil != nil && lockedUntil.UTC().After(now.UTC())
 }

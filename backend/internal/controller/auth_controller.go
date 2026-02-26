@@ -51,12 +51,13 @@ func (c *AuthController) HandleLogin(w http.ResponseWriter, r *http.Request) {
 	}
 
 	output, err := c.auth.Login(r.Context(), domain.LoginInput{
-		Email:      req.Email,
-		Password:   req.Password,
-		TOTPCode:   req.TOTPCode,
-		DeviceName: req.DeviceName,
-		IPAddr:     clientIPFromRequest(r),
-		UserAgent:  r.UserAgent(),
+		Email:        req.Email,
+		Password:     req.Password,
+		TOTPCode:     req.TOTPCode,
+		RecoveryCode: req.RecoveryCode,
+		DeviceName:   req.DeviceName,
+		IPAddr:       clientIPFromRequest(r),
+		UserAgent:    r.UserAgent(),
 	})
 	if err != nil {
 		switch {
@@ -67,9 +68,15 @@ func (c *AuthController) HandleLogin(w http.ResponseWriter, r *http.Request) {
 				MFARequired: true,
 			})
 		case errors.Is(err, domain.ErrInvalidMFA):
-			writeError(w, http.StatusUnauthorized, "invalid_mfa", "invalid totp code")
+			writeError(w, http.StatusUnauthorized, "invalid_mfa", "invalid totp or recovery code")
+		case errors.Is(err, domain.ErrInvalidMFAInput):
+			writeError(w, http.StatusBadRequest, "invalid_mfa_input", "provide either totp_code or recovery_code, not both")
+		case errors.Is(err, domain.ErrMFARateLimited):
+			writeError(w, http.StatusTooManyRequests, "mfa_rate_limited", "too many invalid mfa attempts, try again later")
 		case errors.Is(err, domain.ErrInvalidCredentials):
 			writeError(w, http.StatusUnauthorized, "invalid_credentials", "invalid email or password")
+		case errors.Is(err, domain.ErrWeakPassword):
+			writeError(w, http.StatusUnauthorized, "weak_password", "password does not meet complexity requirements")
 		default:
 			writeError(w, http.StatusInternalServerError, "internal_error", "login failed")
 		}
@@ -112,10 +119,13 @@ func (c *AuthController) HandleTOTPEnable(w http.ResponseWriter, r *http.Request
 		return
 	}
 
-	if err := c.auth.EnableTOTP(r.Context(), session.UserID, req.Code); err != nil {
+	recoveryCodes, err := c.auth.EnableTOTP(r.Context(), session.UserID, req.Code)
+	if err != nil {
 		switch {
 		case errors.Is(err, domain.ErrInvalidMFA):
 			writeError(w, http.StatusUnauthorized, "invalid_mfa", "invalid totp code")
+		case errors.Is(err, domain.ErrMFARateLimited):
+			writeError(w, http.StatusTooManyRequests, "mfa_rate_limited", "too many invalid mfa attempts, try again later")
 		case errors.Is(err, domain.ErrMissingTOTPSecret):
 			writeError(w, http.StatusBadRequest, "totp_not_initialized", "totp setup required before enable")
 		default:
@@ -124,7 +134,10 @@ func (c *AuthController) HandleTOTPEnable(w http.ResponseWriter, r *http.Request
 		return
 	}
 
-	writeJSON(w, http.StatusOK, dto.StatusResponse{Status: "totp_enabled"})
+	writeJSON(w, http.StatusOK, dto.TOTPEnableResponse{
+		Status:        "totp_enabled",
+		RecoveryCodes: recoveryCodes,
+	})
 }
 
 func (c *AuthController) HandleTOTPVerify(w http.ResponseWriter, r *http.Request, session domain.Session) {
@@ -138,6 +151,8 @@ func (c *AuthController) HandleTOTPVerify(w http.ResponseWriter, r *http.Request
 		switch {
 		case errors.Is(err, domain.ErrInvalidMFA):
 			writeError(w, http.StatusUnauthorized, "invalid_mfa", "invalid totp code")
+		case errors.Is(err, domain.ErrMFARateLimited):
+			writeError(w, http.StatusTooManyRequests, "mfa_rate_limited", "too many invalid mfa attempts, try again later")
 		case errors.Is(err, domain.ErrMissingTOTPSecret):
 			writeError(w, http.StatusBadRequest, "totp_not_enabled", "totp is not enabled")
 		default:

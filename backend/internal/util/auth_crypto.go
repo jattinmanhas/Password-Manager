@@ -10,12 +10,14 @@ import (
 	"encoding/binary"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/url"
 	"strings"
 	"time"
 
 	"golang.org/x/crypto/argon2"
+	"golang.org/x/crypto/chacha20poly1305"
 
 	"pmv2/backend/internal/domain"
 )
@@ -151,4 +153,122 @@ func totpCodeForCounter(secret []byte, counter uint64) string {
 	code := truncated % 1000000
 
 	return fmt.Sprintf("%06d", code)
+}
+
+func DeriveTOTPEncryptionKey(pepper string) []byte {
+	sum := sha256.Sum256([]byte("pmv2:totp-secret:" + pepper))
+	return sum[:]
+}
+
+func EncryptTOTPSecret(secret string, key []byte) ([]byte, error) {
+	trimmedSecret := strings.TrimSpace(secret)
+	if trimmedSecret == "" {
+		return nil, errors.New("totp secret is empty")
+	}
+	if len(key) != chacha20poly1305.KeySize {
+		return nil, errors.New("invalid totp encryption key length")
+	}
+
+	aead, err := chacha20poly1305.NewX(key)
+	if err != nil {
+		return nil, fmt.Errorf("create xchacha20poly1305 cipher: %w", err)
+	}
+
+	nonce := make([]byte, chacha20poly1305.NonceSizeX)
+	if _, err := rand.Read(nonce); err != nil {
+		return nil, fmt.Errorf("generate totp nonce: %w", err)
+	}
+
+	ciphertext := aead.Seal(nil, nonce, []byte(trimmedSecret), []byte("pmv2:totp-secret:v1"))
+	return append(nonce, ciphertext...), nil
+}
+
+func DecryptTOTPSecret(payload []byte, key []byte) (string, error) {
+	if len(payload) == 0 {
+		return "", nil
+	}
+	if len(key) != chacha20poly1305.KeySize {
+		return "", errors.New("invalid totp encryption key length")
+	}
+	if len(payload) <= chacha20poly1305.NonceSizeX {
+		return "", errors.New("invalid totp payload length")
+	}
+
+	aead, err := chacha20poly1305.NewX(key)
+	if err != nil {
+		return "", fmt.Errorf("create xchacha20poly1305 cipher: %w", err)
+	}
+
+	nonce := payload[:chacha20poly1305.NonceSizeX]
+	ciphertext := payload[chacha20poly1305.NonceSizeX:]
+	plaintext, err := aead.Open(nil, nonce, ciphertext, []byte("pmv2:totp-secret:v1"))
+	if err != nil {
+		return "", fmt.Errorf("decrypt totp secret: %w", err)
+	}
+
+	return string(plaintext), nil
+}
+
+func ParseStoredTOTPSecret(payload []byte, key []byte) (string, error) {
+	secret, err := DecryptTOTPSecret(payload, key)
+	if err == nil {
+		return secret, nil
+	}
+
+	legacy := strings.TrimSpace(string(payload))
+	if legacy == "" {
+		return "", nil
+	}
+	if _, decodeErr := base32.StdEncoding.WithPadding(base32.NoPadding).DecodeString(strings.ToUpper(legacy)); decodeErr == nil {
+		return legacy, nil
+	}
+	return "", err
+}
+
+func GenerateRecoveryCodes(count int) ([]string, error) {
+	if count <= 0 {
+		return nil, errors.New("recovery code count must be positive")
+	}
+
+	codes := make([]string, 0, count)
+	seen := make(map[string]struct{}, count)
+	for len(codes) < count {
+		code, err := NewRecoveryCode()
+		if err != nil {
+			return nil, err
+		}
+		if _, found := seen[code]; found {
+			continue
+		}
+		seen[code] = struct{}{}
+		codes = append(codes, code)
+	}
+	return codes, nil
+}
+
+func NewRecoveryCode() (string, error) {
+	raw := make([]byte, 8)
+	if _, err := rand.Read(raw); err != nil {
+		return "", fmt.Errorf("generate recovery code bytes: %w", err)
+	}
+	encoded := base32.StdEncoding.WithPadding(base32.NoPadding).EncodeToString(raw)
+	if len(encoded) < 10 {
+		return "", errors.New("generated recovery code is too short")
+	}
+
+	code := encoded[:10]
+	return code[:5] + "-" + code[5:], nil
+}
+
+func NormalizeRecoveryCode(code string) string {
+	normalized := strings.ToUpper(strings.TrimSpace(code))
+	normalized = strings.ReplaceAll(normalized, "-", "")
+	normalized = strings.ReplaceAll(normalized, " ", "")
+	return normalized
+}
+
+func HashRecoveryCode(code string, pepper string) []byte {
+	normalized := NormalizeRecoveryCode(code)
+	sum := sha256.Sum256([]byte("pmv2:recovery-code:" + pepper + ":" + normalized))
+	return sum[:]
 }

@@ -25,10 +25,11 @@ type RegisterResponse struct {
 }
 
 type LoginRequest struct {
-	Email      string `json:"email"`
-	Password   string `json:"password"`
-	TOTPCode   string `json:"totp_code"`
-	DeviceName string `json:"device_name"`
+	Email        string `json:"email"`
+	Password     string `json:"password"`
+	TOTPCode     string `json:"totp_code"`
+	RecoveryCode string `json:"recovery_code"`
+	DeviceName   string `json:"device_name"`
 }
 
 type LoginResponse struct {
@@ -53,6 +54,11 @@ type TOTPSetupResponse struct {
 
 type TOTPCodeRequest struct {
 	Code string `json:"code"`
+}
+
+type TOTPEnableResponse struct {
+	Status        string   `json:"status"`
+	RecoveryCodes []string `json:"recovery_codes"`
 }
 
 type StatusResponse struct {

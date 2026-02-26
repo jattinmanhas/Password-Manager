@@ -19,9 +19,16 @@ CREATE TABLE IF NOT EXISTS auth_credentials (
   password_hash BYTEA NOT NULL,
   mfa_totp_enabled BOOLEAN NOT NULL DEFAULT FALSE,
   mfa_totp_secret_enc BYTEA,
+  totp_failed_attempts INTEGER NOT NULL DEFAULT 0,
+  totp_window_started_at TIMESTAMPTZ,
+  totp_locked_until TIMESTAMPTZ,
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
+
+ALTER TABLE IF EXISTS auth_credentials ADD COLUMN IF NOT EXISTS totp_failed_attempts INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE IF EXISTS auth_credentials ADD COLUMN IF NOT EXISTS totp_window_started_at TIMESTAMPTZ;
+ALTER TABLE IF EXISTS auth_credentials ADD COLUMN IF NOT EXISTS totp_locked_until TIMESTAMPTZ;
 
 CREATE TABLE IF NOT EXISTS user_recovery (
   user_id UUID PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
@@ -113,6 +120,14 @@ CREATE TABLE IF NOT EXISTS backups_registry (
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
+CREATE TABLE IF NOT EXISTS totp_recovery_codes (
+  user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  code_hash BYTEA NOT NULL,
+  used_at TIMESTAMPTZ,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  PRIMARY KEY (user_id, code_hash)
+);
+
 CREATE INDEX IF NOT EXISTS idx_vault_items_owner_user_id ON vault_items(owner_user_id);
 CREATE INDEX IF NOT EXISTS idx_sessions_user_id ON sessions(user_id);
 CREATE INDEX IF NOT EXISTS idx_sessions_refresh_token_hash ON sessions(refresh_token_hash);
@@ -121,3 +136,4 @@ CREATE INDEX IF NOT EXISTS idx_vault_shares_user_id ON vault_shares(user_id);
 CREATE INDEX IF NOT EXISTS idx_vault_folders_owner_user_id ON vault_folders(owner_user_id);
 CREATE INDEX IF NOT EXISTS idx_vault_attachments_item_id ON vault_attachments(item_id);
 CREATE INDEX IF NOT EXISTS idx_backups_registry_created_by_user_id ON backups_registry(created_by_user_id);
+CREATE INDEX IF NOT EXISTS idx_totp_recovery_codes_user_id ON totp_recovery_codes(user_id);

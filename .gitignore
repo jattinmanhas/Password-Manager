@@ -18,3 +18,5 @@ node_modules/
 # Go
 *.test
 *.out
+
+docs/
