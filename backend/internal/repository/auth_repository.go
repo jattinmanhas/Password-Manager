@@ -27,9 +27,9 @@ func (r *AuthRepository) CreateUserWithCredentials(ctx context.Context, input do
 	}
 
 	_, err = tx.ExecContext(ctx, `
-		INSERT INTO users (id, email, name, master_password_hint, created_at, updated_at)
-		VALUES ($1, $2, $3, $4, NOW(), NOW())
-	`, input.UserID, input.Email, nullableText(input.Name), nullableText(input.PasswordHint))
+		INSERT INTO users (id, email, name, created_at, updated_at)
+		VALUES ($1, $2, $3, NOW(), NOW())
+	`, input.UserID, input.Email, nullableText(input.Name))
 	if err != nil {
 		_ = tx.Rollback()
 		if isUniqueViolation(err) {
@@ -64,6 +64,7 @@ func (r *AuthRepository) GetUserAuthByEmail(ctx context.Context, email string) (
 		SELECT
 			u.id,
 			u.email,
+			u.name,
 			ac.salt,
 			ac.password_hash,
 			ac.params,
@@ -78,6 +79,7 @@ func (r *AuthRepository) GetUserAuthByEmail(ctx context.Context, email string) (
 	`, email).Scan(
 		&record.UserID,
 		&record.Email,
+		&record.Name,
 		&record.Salt,
 		&record.PasswordHash,
 		&record.RawParams,
@@ -126,13 +128,13 @@ func (r *AuthRepository) CreateSession(ctx context.Context, input domain.CreateS
 func (r *AuthRepository) GetActiveSessionByTokenHash(ctx context.Context, tokenHash []byte) (domain.Session, error) {
 	var session domain.Session
 	err := r.db.QueryRowContext(ctx, `
-		SELECT s.id, s.user_id, u.email, s.expires_at
+		SELECT s.id, s.user_id, u.email, u.name, s.expires_at
 		FROM sessions s
 		JOIN users u ON u.id = s.user_id
 		WHERE s.refresh_token_hash = $1
 		  AND s.revoked_at IS NULL
 		  AND s.expires_at > NOW()
-	`, tokenHash).Scan(&session.ID, &session.UserID, &session.Email, &session.ExpiresAt)
+	`, tokenHash).Scan(&session.ID, &session.UserID, &session.Email, &session.Name, &session.ExpiresAt)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return domain.Session{}, domain.ErrNotFound

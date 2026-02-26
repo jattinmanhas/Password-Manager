@@ -32,7 +32,7 @@ func DefaultArgon2Params() domain.Argon2Params {
 }
 
 func HashPassword(password string, params domain.Argon2Params) (salt []byte, hash []byte, err error) {
-	salt = make([]byte, 16)
+	salt = make([]byte, 32)
 	if _, err := rand.Read(salt); err != nil {
 		return nil, nil, fmt.Errorf("generate salt: %w", err)
 	}

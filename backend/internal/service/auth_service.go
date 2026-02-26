@@ -37,37 +37,37 @@ const (
 	recoveryCodeCount = 10
 )
 
-func (s *AuthService) Register(ctx context.Context, email string, password string, name string, masterPasswordHint string) (string, error) {
+func (s *AuthService) Register(ctx context.Context, email string, password string, name string) (domain.RegisterOutput, error) {
 	normalizedEmail := util.NormalizeEmail(email)
 	if normalizedEmail == "" {
-		return "", domain.ErrInvalidCredentials
+		return domain.RegisterOutput{}, domain.ErrInvalidCredentials
 	}
 
 	if err := util.ValidatePasswordStrength(password); err != nil {
-		return "", err
+		return domain.RegisterOutput{}, err
 	}
 
 	params := util.DefaultArgon2Params()
 	paramsJSON, err := util.MarshalArgon2Params(params)
 	if err != nil {
-		return "", fmt.Errorf("marshal argon2 params: %w", err)
+		return domain.RegisterOutput{}, fmt.Errorf("marshal argon2 params: %w", err)
 	}
 
 	salt, passwordHash, err := util.HashPassword(password, params)
 	if err != nil {
-		return "", err
+		return domain.RegisterOutput{}, err
 	}
 
 	userID, err := util.NewUUID()
 	if err != nil {
-		return "", err
+		return domain.RegisterOutput{}, err
 	}
 
+	trimmedName := util.TrimOrEmpty(name)
 	err = s.repo.CreateUserWithCredentials(ctx, domain.CreateUserInput{
 		UserID:       userID,
 		Email:        normalizedEmail,
-		Name:         util.TrimOrEmpty(name),
-		PasswordHint: util.TrimOrEmpty(masterPasswordHint),
+		Name:         trimmedName,
 		Algo:         "argon2id",
 		ParamsJSON:   paramsJSON,
 		Salt:         salt,
@@ -75,12 +75,16 @@ func (s *AuthService) Register(ctx context.Context, email string, password strin
 	})
 	if err != nil {
 		if errors.Is(err, domain.ErrEmailTaken) {
-			return "", domain.ErrEmailTaken
+			return domain.RegisterOutput{}, domain.ErrEmailTaken
 		}
-		return "", fmt.Errorf("create user credentials: %w", err)
+		return domain.RegisterOutput{}, fmt.Errorf("create user credentials: %w", err)
 	}
 
-	return userID, nil
+	return domain.RegisterOutput{
+		UserID: userID,
+		Email:  normalizedEmail,
+		Name:   trimmedName,
+	}, nil
 }
 
 func (s *AuthService) Login(ctx context.Context, input domain.LoginInput) (domain.LoginOutput, error) {
@@ -170,7 +174,13 @@ func (s *AuthService) Login(ctx context.Context, input domain.LoginInput) (domai
 		return domain.LoginOutput{}, fmt.Errorf("create session: %w", err)
 	}
 
-	return domain.LoginOutput{SessionToken: sessionToken, ExpiresAt: expiresAt}, nil
+	return domain.LoginOutput{
+		SessionToken: sessionToken,
+		ExpiresAt:    expiresAt,
+		UserID:       record.UserID,
+		Email:        record.Email,
+		Name:         record.Name,
+	}, nil
 }
 
 func (s *AuthService) Authenticate(ctx context.Context, token string) (domain.Session, error) {

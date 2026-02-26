@@ -7,7 +7,7 @@ import (
 )
 
 func ValidatePasswordStrength(password string) error {
-	if len(password) < 12 {
+	if len(password) < 8 {
 		return domain.ErrWeakPassword
 	}
 	var hasUpper, hasLower, hasNumber, hasSpecial bool

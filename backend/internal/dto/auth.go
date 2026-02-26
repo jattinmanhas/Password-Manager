@@ -13,14 +13,15 @@ type HealthResponse struct {
 }
 
 type RegisterRequest struct {
-	Email              string `json:"email"`
-	Password           string `json:"password"`
-	Name               string `json:"name"`
-	MasterPasswordHint string `json:"master_password_hint"`
+	Email    string `json:"email"`
+	Password string `json:"password"`
+	Name     string `json:"name"`
 }
 
 type RegisterResponse struct {
 	UserID string `json:"user_id"`
+	Email  string `json:"email"`
+	Name   string `json:"name"`
 	Status string `json:"status"`
 }
 
@@ -35,6 +36,9 @@ type LoginRequest struct {
 type LoginResponse struct {
 	SessionToken string `json:"session_token"`
 	ExpiresAt    string `json:"expires_at"`
+	UserID       string `json:"user_id"`
+	Email        string `json:"email"`
+	Name         string `json:"name"`
 }
 
 type MFARequiredResponse struct {

@@ -123,10 +123,9 @@ func TestHandleRegister_Success(t *testing.T) {
 	c := setupController(repo)
 
 	body := map[string]string{
-		"email":                "test@example.com",
-		"password":             "Password123!",
-		"name":                 "Test",
-		"master_password_hint": "hint",
+		"email":    "test@example.com",
+		"password": "Password123!",
+		"name":     "Test",
 	}
 	b, _ := json.Marshal(body)
 	req := httptest.NewRequest(http.MethodPost, "/register", bytes.NewReader(b))
@@ -143,6 +142,9 @@ func TestHandleRegister_Success(t *testing.T) {
 	if resp["status"] != "registered" {
 		t.Errorf("expected status=registered, got %v", resp["status"])
 	}
+	if resp["email"] == nil || resp["name"] == nil {
+		t.Errorf("expected email and name to be present in response")
+	}
 }
 
 func TestHandleRegister_EmailTaken(t *testing.T) {
@@ -154,10 +156,9 @@ func TestHandleRegister_EmailTaken(t *testing.T) {
 	c := setupController(repo)
 
 	body := map[string]string{
-		"email":                "test@example.com",
-		"password":             "Password123!",
-		"name":                 "Test",
-		"master_password_hint": "hint",
+		"email":    "test@example.com",
+		"password": "Password123!",
+		"name":     "Test",
 	}
 	b, _ := json.Marshal(body)
 	req := httptest.NewRequest(http.MethodPost, "/register", bytes.NewReader(b))

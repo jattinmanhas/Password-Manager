@@ -27,20 +27,27 @@ func (c *AuthController) HandleRegister(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	userID, err := c.auth.Register(r.Context(), req.Email, req.Password, req.Name, req.MasterPasswordHint)
+	resp, err := c.auth.Register(r.Context(), req.Email, req.Password, req.Name)
 	if err != nil {
 		switch {
 		case errors.Is(err, domain.ErrEmailTaken):
 			writeError(w, http.StatusConflict, "email_taken", "email already registered")
 		case errors.Is(err, domain.ErrInvalidCredentials):
 			writeError(w, http.StatusBadRequest, "invalid_credentials", "email or password does not meet policy")
+		case errors.Is(err, domain.ErrWeakPassword):
+			writeError(w, http.StatusBadRequest, "weak_password", "password does not meet complexity requirements")
 		default:
 			writeError(w, http.StatusInternalServerError, "internal_error", "registration failed")
 		}
 		return
 	}
 
-	writeJSON(w, http.StatusCreated, dto.RegisterResponse{UserID: userID, Status: "registered"})
+	writeJSON(w, http.StatusCreated, dto.RegisterResponse{
+		UserID: resp.UserID,
+		Email:  resp.Email,
+		Name:   resp.Name,
+		Status: "registered",
+	})
 }
 
 func (c *AuthController) HandleLogin(w http.ResponseWriter, r *http.Request) {
@@ -86,6 +93,9 @@ func (c *AuthController) HandleLogin(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, dto.LoginResponse{
 		SessionToken: output.SessionToken,
 		ExpiresAt:    output.ExpiresAt.UTC().Format(time.RFC3339),
+		UserID:       output.UserID,
+		Email:        output.Email,
+		Name:         output.Name,
 	})
 }
 

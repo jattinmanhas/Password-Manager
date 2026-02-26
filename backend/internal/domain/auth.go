@@ -30,6 +30,7 @@ type Session struct {
 	ID        string
 	UserID    string
 	Email     string
+	Name      string
 	ExpiresAt time.Time
 }
 
@@ -46,6 +47,15 @@ type LoginInput struct {
 type LoginOutput struct {
 	SessionToken string
 	ExpiresAt    time.Time
+	UserID       string
+	Email        string
+	Name         string
+}
+
+type RegisterOutput struct {
+	UserID string
+	Email  string
+	Name   string
 }
 
 type TOTPSetup struct {
@@ -57,7 +67,6 @@ type CreateUserInput struct {
 	UserID       string
 	Email        string
 	Name         string
-	PasswordHint string
 	Algo         string
 	ParamsJSON   []byte
 	Salt         []byte
@@ -67,6 +76,7 @@ type CreateUserInput struct {
 type UserAuthRecord struct {
 	UserID             string
 	Email              string
+	Name               string
 	Salt               []byte
 	PasswordHash       []byte
 	RawParams          []byte

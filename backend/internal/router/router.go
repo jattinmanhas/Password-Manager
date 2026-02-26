@@ -66,7 +66,7 @@ func NewRouter(cfg config.Config, authService *service.AuthService) http.Handler
 
 	authLimiter := middlewares.NewRateLimiter(rate.Limit(5), 15)
 	root := newRouteGroup(mux, "/")
-	v1 := root.Group("/v1")
+	v1 := root.Group("/api/v1")
 	auth := v1.Group("/auth")
 
 	root.Handle(http.MethodGet, "/healthz", func(w http.ResponseWriter, r *http.Request) {

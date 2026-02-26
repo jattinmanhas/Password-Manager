@@ -135,7 +135,7 @@ func TestRegister_Success(t *testing.T) {
 	}
 
 	svc := newTestAuthService(repo)
-	userID, err := svc.Register(context.Background(), "test@example.com", "Password123!", "Test User", "Hint")
+	resp, err := svc.Register(context.Background(), "test@example.com", "Password123!", "Test User")
 	if err != nil {
 		t.Fatalf("Register failed: %v", err)
 	}
@@ -144,7 +144,7 @@ func TestRegister_Success(t *testing.T) {
 		t.Error("Register did not call CreateUserWithCredentials")
 	}
 
-	if userID == "" {
+	if resp.UserID == "" {
 		t.Error("Register returned empty userID")
 	}
 }
@@ -157,7 +157,7 @@ func TestRegister_EmailTaken(t *testing.T) {
 	}
 
 	svc := newTestAuthService(repo)
-	_, err := svc.Register(context.Background(), "test@example.com", "Password123!", "Test User", "")
+	_, err := svc.Register(context.Background(), "test@example.com", "Password123!", "Test User")
 	if err != domain.ErrEmailTaken {
 		t.Errorf("expected ErrEmailTaken, got %v", err)
 	}
