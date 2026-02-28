@@ -3,51 +3,14 @@ import {
     RegisterResponse,
     LoginRequest,
     LoginResponse,
+    SessionResponse,
     TOTPSetupResponse,
     TOTPEnableResponse,
-    ErrorResponse,
 } from "../types";
 
-const API_BASE = "/api/v1";
+import { request, ApiError } from "../../../lib/api";
 
-export class ApiError extends Error {
-    constructor(public code: string, message: string) {
-        super(message);
-        this.name = "ApiError";
-    }
-}
-
-async function request<T>(
-    method: string,
-    endpoint: string,
-    body?: unknown,
-    token?: string
-): Promise<T> {
-    const headers: HeadersInit = {
-        "Content-Type": "application/json",
-    };
-    if (token) {
-        headers["Authorization"] = `Bearer ${token}`;
-    }
-
-    const res = await fetch(`${API_BASE}${endpoint}`, {
-        method,
-        headers,
-        body: body ? JSON.stringify(body) : undefined,
-    });
-
-    if (!res.ok) {
-        let errRes: ErrorResponse;
-        try {
-            errRes = await res.json();
-        } catch {
-            throw new Error(`HTTP ${res.status}`);
-        }
-        throw new ApiError(errRes.error, errRes.message);
-    }
-
-    return res.json() as Promise<T>;
-}
+export { ApiError };
 
 export const authService = {
     register(req: RegisterRequest) {
@@ -56,16 +19,22 @@ export const authService = {
     login(req: LoginRequest) {
         return request<LoginResponse>("POST", "/auth/login", req);
     },
-    logout(token: string) {
-        return request<void>("POST", "/auth/logout", undefined, token);
+    me() {
+        return request<SessionResponse>("GET", "/auth/me");
     },
-    setupTOTP(token: string) {
-        return request<TOTPSetupResponse>("POST", "/auth/totp/setup", undefined, token);
+    logout() {
+        return request<void>("POST", "/auth/logout");
     },
-    enableTOTP(token: string, code: string) {
-        return request<TOTPEnableResponse>("POST", "/auth/totp/enable", { code }, token);
+    setupTOTP() {
+        return request<TOTPSetupResponse>("POST", "/auth/totp/setup");
     },
-    verifyTOTP(token: string, code: string) {
-        return request<void>("POST", "/auth/totp/verify", { code }, token);
+    enableTOTP(code: string) {
+        return request<TOTPEnableResponse>("POST", "/auth/totp/enable", { code });
+    },
+    verifyTOTP(code: string) {
+        return request<void>("POST", "/auth/totp/verify", { code });
+    },
+    disableTOTP() {
+        return request<void>("POST", "/auth/totp/disable");
     },
 };

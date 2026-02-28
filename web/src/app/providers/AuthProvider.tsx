@@ -1,12 +1,14 @@
 import { createContext, useContext, useEffect, useState, ReactNode } from "react";
 import { authService } from "../../features/auth/services/auth.service";
+import { ApiError } from "../../lib/api";
 import { LoginRequest, RegisterRequest } from "../../features/auth/types";
 
 interface SessionState {
-    token: string;
+    userId: string;
     expiresAt: string;
     email: string;
     name: string;
+    isTotpEnabled: boolean;
 }
 
 interface AuthContextType {
@@ -15,10 +17,9 @@ interface AuthContextType {
     login: (req: LoginRequest) => Promise<void>;
     register: (req: RegisterRequest) => Promise<void>;
     logout: () => Promise<void>;
+    refreshSession: () => Promise<void>;
     setSessionRaw: (session: SessionState | null) => void;
 }
-
-const SESSION_STORAGE_KEY = "pmv2.session";
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
@@ -27,59 +28,83 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const [isLoading, setIsLoading] = useState(true);
 
     useEffect(() => {
-        const raw = localStorage.getItem(SESSION_STORAGE_KEY);
-        if (raw) {
+        let cancelled = false;
+
+        const bootstrap = async () => {
             try {
-                const parsed = JSON.parse(raw);
-                if (parsed.token && parsed.expiresAt) {
-                    setSession(parsed);
+                const res = await authService.me();
+                if (!cancelled) {
+                    setSession({
+                        userId: res.user_id,
+                        expiresAt: res.expires_at,
+                        email: res.email,
+                        name: res.name,
+                        isTotpEnabled: res.is_totp_enabled,
+                    });
                 }
             } catch (e) {
-                // invalid session
+                if (e instanceof ApiError && e.code === "unauthorized") {
+                    if (!cancelled) setSession(null);
+                    return;
+                }
+                if (!cancelled) setSession(null);
+            } finally {
+                if (!cancelled) setIsLoading(false);
             }
-        }
-        setIsLoading(false);
+        };
+
+        void bootstrap();
+        return () => {
+            cancelled = true;
+        };
     }, []);
 
     const setSessionRaw = (newSession: SessionState | null) => {
         setSession(newSession);
-        if (newSession) {
-            localStorage.setItem(SESSION_STORAGE_KEY, JSON.stringify(newSession));
-        } else {
-            localStorage.removeItem(SESSION_STORAGE_KEY);
-        }
     };
 
     const login = async (req: LoginRequest) => {
         const res = await authService.login(req);
         // If it requires MFA, authService throws an ApiError with code "mfa_required"
         setSessionRaw({
-            token: res.session_token,
+            userId: res.user_id,
             expiresAt: res.expires_at,
             email: res.email,
             name: res.name,
+            isTotpEnabled: res.is_totp_enabled,
         });
     };
 
     const register = async (req: RegisterRequest) => {
-        const res = await authService.register(req);
-        // We could auto-login here, but the current flow doesn't seem to do it.
-        // If the user wants to auto-login, we would use res.name and res.email.
+        await authService.register(req);
     };
 
     const logout = async () => {
-        if (session) {
-            try {
-                await authService.logout(session.token);
-            } catch (e) {
-                // ignore logout errors on client
-            }
+        try {
+            await authService.logout();
+        } catch (e) {
+            // ignore logout errors on client
         }
         setSessionRaw(null);
     };
 
+    const refreshSession = async () => {
+        try {
+            const res = await authService.me();
+            setSession({
+                userId: res.user_id,
+                expiresAt: res.expires_at,
+                email: res.email,
+                name: res.name,
+                isTotpEnabled: res.is_totp_enabled,
+            });
+        } catch (e) {
+            setSession(null);
+        }
+    };
+
     return (
-        <AuthContext.Provider value={{ session, isLoading, login, register, logout, setSessionRaw }}>
+        <AuthContext.Provider value={{ session, isLoading, login, register, logout, refreshSession, setSessionRaw }}>
             {children}
         </AuthContext.Provider>
     );

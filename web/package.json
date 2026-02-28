@@ -7,7 +7,8 @@
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "crypto:check": "node ./scripts/crypto-smoke.mjs"
   },
   "dependencies": {
     "@noble/hashes": "^1.5.0",
@@ -15,6 +16,8 @@
     "lucide-react": "^0.575.0",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
+    "react-hot-toast": "^2.6.0",
+    "react-qr-code": "^2.0.18",
     "react-router-dom": "^7.13.1"
   },
   "devDependencies": {

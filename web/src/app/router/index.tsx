@@ -1,7 +1,10 @@
 import { createBrowserRouter, RouterProvider, Navigate } from "react-router-dom";
 import { AuthLayout } from "../../components/layout/AuthLayout";
+import { DashboardLayout } from "../../components/layout/DashboardLayout";
 import { Login } from "../../features/auth/pages/Login";
 import { Register } from "../../features/auth/pages/Register";
+import { TOTPSetup } from "../../features/auth/pages/TOTPSetup";
+import { Dashboard } from "../../features/dashboard/pages/Dashboard";
 import { useAuth } from "../providers/AuthProvider";
 import { NotFound } from "../../features/shared/pages/NotFound";
 import { ErrorBoundary } from "../../features/shared/pages/ErrorBoundary";
@@ -16,27 +19,8 @@ const GuardedRoute = ({ children }: { children: React.ReactNode }) => {
 const PublicOnlyRoute = ({ children }: { children: React.ReactNode }) => {
     const { session, isLoading } = useAuth();
     if (isLoading) return <div>Loading...</div>;
-    if (session) return <Navigate to="/" replace />;
+    if (session) return <Navigate to="/dashboard" replace />;
     return <>{children}</>;
-};
-
-const DashboardPlaceholder = () => {
-    const { session, logout } = useAuth();
-    return (
-        <div style={{ minHeight: "100vh", backgroundColor: "var(--color-soft-gray)", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: "2rem", textAlign: "center" }}>
-            <h1 style={{ fontSize: "1.5rem", fontWeight: "bold", marginBottom: "1rem" }}>Authenticated Vault</h1>
-            <p style={{ marginBottom: "1rem", color: "var(--color-text-subtle)", fontFamily: "monospace", fontSize: "0.875rem", maxWidth: "28rem", wordBreak: "break-all" }}>
-                Token: {session?.token}
-            </p>
-            <button
-                onClick={logout}
-                className="btn"
-                style={{ backgroundColor: "var(--color-border)", color: "var(--color-text-main)", maxWidth: "10rem" }}
-            >
-                Sign Out
-            </button>
-        </div>
-    );
 };
 
 const router = createBrowserRouter([
@@ -45,11 +29,48 @@ const router = createBrowserRouter([
         children: [
             {
                 path: "/",
+                element: <Navigate to="/dashboard" replace />
+            },
+            {
                 element: (
                     <GuardedRoute>
-                        <DashboardPlaceholder />
+                        <DashboardLayout />
                     </GuardedRoute>
                 ),
+                children: [
+                    {
+                        path: "/dashboard",
+                        element: <Dashboard />
+                    },
+                    {
+                        path: "/vault",
+                        element: <div>Vault Placeholder</div>
+                    },
+                    {
+                        path: "/shared",
+                        element: <div>Shared Vaults Placeholder</div>
+                    },
+                    {
+                        path: "/health",
+                        element: <div>Security Health Placeholder</div>
+                    },
+                    {
+                        path: "/activity",
+                        element: <div>Activity Placeholder</div>
+                    },
+                    {
+                        path: "/family",
+                        element: <div>Family Members Placeholder</div>
+                    },
+                    {
+                        path: "/settings",
+                        element: <div>Settings Placeholder</div>
+                    },
+                    {
+                        path: "/setup-2fa",
+                        element: <TOTPSetup />
+                    }
+                ]
             },
             {
                 element: (

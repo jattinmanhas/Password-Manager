@@ -25,11 +25,19 @@ export interface LoginRequest {
 }
 
 export interface LoginResponse {
-    session_token: string;
     expires_at: string;
     user_id: string;
     email: string;
     name: string;
+    is_totp_enabled: boolean;
+}
+
+export interface SessionResponse {
+    expires_at: string;
+    user_id: string;
+    email: string;
+    name: string;
+    is_totp_enabled: boolean;
 }
 
 export interface TOTPSetupResponse {

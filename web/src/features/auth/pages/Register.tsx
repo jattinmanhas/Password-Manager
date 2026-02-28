@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
+import { toast } from "react-hot-toast";
 import { Eye, EyeOff } from "lucide-react";
 import { useAuth } from "../../../app/providers/AuthProvider";
 import { ApiError } from "../services/auth.service";
@@ -34,6 +35,7 @@ export function Register() {
         setLoading(true);
         try {
             await register({ email, password, name });
+            toast.success("Account created successfully!");
             navigate("/login", { replace: true });
         } catch (err) {
             if (err instanceof ApiError) {
