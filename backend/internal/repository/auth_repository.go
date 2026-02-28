@@ -128,13 +128,14 @@ func (r *AuthRepository) CreateSession(ctx context.Context, input domain.CreateS
 func (r *AuthRepository) GetActiveSessionByTokenHash(ctx context.Context, tokenHash []byte) (domain.Session, error) {
 	var session domain.Session
 	err := r.db.QueryRowContext(ctx, `
-		SELECT s.id, s.user_id, u.email, u.name, s.expires_at
+		SELECT s.id, s.user_id, u.email, u.name, ac.mfa_totp_enabled, s.expires_at
 		FROM sessions s
 		JOIN users u ON u.id = s.user_id
+		JOIN auth_credentials ac ON ac.user_id = u.id
 		WHERE s.refresh_token_hash = $1
 		  AND s.revoked_at IS NULL
 		  AND s.expires_at > NOW()
-	`, tokenHash).Scan(&session.ID, &session.UserID, &session.Email, &session.Name, &session.ExpiresAt)
+	`, tokenHash).Scan(&session.ID, &session.UserID, &session.Email, &session.Name, &session.TOTPEnabled, &session.ExpiresAt)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return domain.Session{}, domain.ErrNotFound
@@ -206,6 +207,39 @@ func (r *AuthRepository) EnableTOTP(ctx context.Context, userID string) error {
 	if affected == 0 {
 		return domain.ErrNotFound
 	}
+	return nil
+}
+
+func (r *AuthRepository) DisableTOTP(ctx context.Context, userID string) error {
+	result, err := r.db.ExecContext(ctx, `
+		UPDATE auth_credentials
+		SET
+			mfa_totp_enabled = FALSE,
+			mfa_totp_secret_enc = NULL,
+			totp_failed_attempts = 0,
+			totp_window_started_at = NULL,
+			totp_locked_until = NULL,
+			updated_at = NOW()
+		WHERE user_id = $1
+	`, userID)
+	if err != nil {
+		return fmt.Errorf("disable totp: %w", err)
+	}
+
+	affected, err := result.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("read rows affected: %w", err)
+	}
+	if affected == 0 {
+		return domain.ErrNotFound
+	}
+
+	// Also delete any recovery codes for this user
+	_, err = r.db.ExecContext(ctx, `DELETE FROM totp_recovery_codes WHERE user_id = $1`, userID)
+	if err != nil {
+		return fmt.Errorf("delete recovery codes: %w", err)
+	}
+
 	return nil
 }
 

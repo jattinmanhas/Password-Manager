@@ -27,11 +27,12 @@ type Argon2Params struct {
 }
 
 type Session struct {
-	ID        string
-	UserID    string
-	Email     string
-	Name      string
-	ExpiresAt time.Time
+	ID          string
+	UserID      string
+	Email       string
+	Name        string
+	TOTPEnabled bool
+	ExpiresAt   time.Time
 }
 
 type LoginInput struct {
@@ -50,6 +51,7 @@ type LoginOutput struct {
 	UserID       string
 	Email        string
 	Name         string
+	TOTPEnabled  bool
 }
 
 type RegisterOutput struct {
@@ -113,6 +115,7 @@ type AuthRepository interface {
 	RevokeSessionByTokenHash(ctx context.Context, tokenHash []byte) (bool, error)
 	SetTOTPSecret(ctx context.Context, userID string, secretEnc []byte) (bool, error)
 	EnableTOTP(ctx context.Context, userID string) error
+	DisableTOTP(ctx context.Context, userID string) error
 	GetTOTPState(ctx context.Context, userID string) (TOTPState, error)
 	RecordTOTPFailure(ctx context.Context, userID string, now time.Time, maxAttempts int, window time.Duration, lockDuration time.Duration) (*time.Time, error)
 	ResetTOTPFailures(ctx context.Context, userID string) error

@@ -180,6 +180,7 @@ func (s *AuthService) Login(ctx context.Context, input domain.LoginInput) (domai
 		UserID:       record.UserID,
 		Email:        record.Email,
 		Name:         record.Name,
+		TOTPEnabled:  record.TOTPEnabled,
 	}, nil
 }
 
@@ -310,6 +311,13 @@ func (s *AuthService) VerifyTOTPForSession(ctx context.Context, userID string, c
 	}
 	if err := s.repo.ResetTOTPFailures(ctx, userID); err != nil {
 		return fmt.Errorf("reset totp failures: %w", err)
+	}
+	return nil
+}
+
+func (s *AuthService) DisableTOTP(ctx context.Context, userID string) error {
+	if err := s.repo.DisableTOTP(ctx, userID); err != nil {
+		return fmt.Errorf("disable totp service: %w", err)
 	}
 	return nil
 }

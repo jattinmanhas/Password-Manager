@@ -1,7 +1,6 @@
 package controller
 
 import (
-	"encoding/json"
 	"errors"
 	"net/http"
 	"strings"
@@ -10,20 +9,37 @@ import (
 	"pmv2/backend/internal/domain"
 	"pmv2/backend/internal/dto"
 	"pmv2/backend/internal/service"
+	"pmv2/backend/internal/util"
 )
 
 type AuthController struct {
-	auth *service.AuthService
+	auth                *service.AuthService
+	sessionCookieName   string
+	sessionCookieSecure bool
 }
 
-func NewAuthController(authService *service.AuthService) *AuthController {
-	return &AuthController{auth: authService}
+type AuthCookieConfig struct {
+	Name   string
+	Secure bool
+}
+
+func NewAuthController(authService *service.AuthService, cookieConfig AuthCookieConfig) *AuthController {
+	cookieName := strings.TrimSpace(cookieConfig.Name)
+	if cookieName == "" {
+		cookieName = "pmv2_session"
+	}
+
+	return &AuthController{
+		auth:                authService,
+		sessionCookieName:   cookieName,
+		sessionCookieSecure: cookieConfig.Secure,
+	}
 }
 
 func (c *AuthController) HandleRegister(w http.ResponseWriter, r *http.Request) {
 	var req dto.RegisterRequest
-	if err := readJSON(r, &req); err != nil {
-		writeError(w, http.StatusBadRequest, "invalid_json", "invalid request body")
+	if err := util.ReadJSON(r, &req); err != nil {
+		util.WriteError(w, http.StatusBadRequest, "invalid_json", "invalid request body")
 		return
 	}
 
@@ -31,18 +47,18 @@ func (c *AuthController) HandleRegister(w http.ResponseWriter, r *http.Request) 
 	if err != nil {
 		switch {
 		case errors.Is(err, domain.ErrEmailTaken):
-			writeError(w, http.StatusConflict, "email_taken", "email already registered")
+			util.WriteError(w, http.StatusConflict, "email_taken", "email already registered")
 		case errors.Is(err, domain.ErrInvalidCredentials):
-			writeError(w, http.StatusBadRequest, "invalid_credentials", "email or password does not meet policy")
+			util.WriteError(w, http.StatusBadRequest, "invalid_credentials", "email or password does not meet policy")
 		case errors.Is(err, domain.ErrWeakPassword):
-			writeError(w, http.StatusBadRequest, "weak_password", "password does not meet complexity requirements")
+			util.WriteError(w, http.StatusBadRequest, "weak_password", "password does not meet complexity requirements")
 		default:
-			writeError(w, http.StatusInternalServerError, "internal_error", "registration failed")
+			util.WriteError(w, http.StatusInternalServerError, "internal_error", "registration failed")
 		}
 		return
 	}
 
-	writeJSON(w, http.StatusCreated, dto.RegisterResponse{
+	util.WriteJSON(w, http.StatusCreated, dto.RegisterResponse{
 		UserID: resp.UserID,
 		Email:  resp.Email,
 		Name:   resp.Name,
@@ -52,8 +68,8 @@ func (c *AuthController) HandleRegister(w http.ResponseWriter, r *http.Request) 
 
 func (c *AuthController) HandleLogin(w http.ResponseWriter, r *http.Request) {
 	var req dto.LoginRequest
-	if err := readJSON(r, &req); err != nil {
-		writeError(w, http.StatusBadRequest, "invalid_json", "invalid request body")
+	if err := util.ReadJSON(r, &req); err != nil {
+		util.WriteError(w, http.StatusBadRequest, "invalid_json", "invalid request body")
 		return
 	}
 
@@ -63,69 +79,82 @@ func (c *AuthController) HandleLogin(w http.ResponseWriter, r *http.Request) {
 		TOTPCode:     req.TOTPCode,
 		RecoveryCode: req.RecoveryCode,
 		DeviceName:   req.DeviceName,
-		IPAddr:       clientIPFromRequest(r),
+		IPAddr:       util.ClientIPFromRequest(r),
 		UserAgent:    r.UserAgent(),
 	})
 	if err != nil {
 		switch {
 		case errors.Is(err, domain.ErrMFARequired):
-			writeJSON(w, http.StatusUnauthorized, dto.MFARequiredResponse{
+			util.WriteJSON(w, http.StatusUnauthorized, dto.MFARequiredResponse{
 				Error:       "mfa_required",
 				Message:     "totp code is required for this account",
 				MFARequired: true,
 			})
 		case errors.Is(err, domain.ErrInvalidMFA):
-			writeError(w, http.StatusUnauthorized, "invalid_mfa", "invalid totp or recovery code")
+			util.WriteError(w, http.StatusUnauthorized, "invalid_mfa", "invalid totp or recovery code")
 		case errors.Is(err, domain.ErrInvalidMFAInput):
-			writeError(w, http.StatusBadRequest, "invalid_mfa_input", "provide either totp_code or recovery_code, not both")
+			util.WriteError(w, http.StatusBadRequest, "invalid_mfa_input", "provide either totp_code or recovery_code, not both")
 		case errors.Is(err, domain.ErrMFARateLimited):
-			writeError(w, http.StatusTooManyRequests, "mfa_rate_limited", "too many invalid mfa attempts, try again later")
+			util.WriteError(w, http.StatusTooManyRequests, "mfa_rate_limited", "too many invalid mfa attempts, try again later")
 		case errors.Is(err, domain.ErrInvalidCredentials):
-			writeError(w, http.StatusUnauthorized, "invalid_credentials", "invalid email or password")
+			util.WriteError(w, http.StatusUnauthorized, "invalid_credentials", "invalid email or password")
 		case errors.Is(err, domain.ErrWeakPassword):
-			writeError(w, http.StatusUnauthorized, "weak_password", "password does not meet complexity requirements")
+			util.WriteError(w, http.StatusUnauthorized, "weak_password", "password does not meet complexity requirements")
 		default:
-			writeError(w, http.StatusInternalServerError, "internal_error", "login failed")
+			util.WriteError(w, http.StatusInternalServerError, "internal_error", "login failed")
 		}
 		return
 	}
 
-	writeJSON(w, http.StatusOK, dto.LoginResponse{
-		SessionToken: output.SessionToken,
-		ExpiresAt:    output.ExpiresAt.UTC().Format(time.RFC3339),
-		UserID:       output.UserID,
-		Email:        output.Email,
-		Name:         output.Name,
+	c.setSessionCookie(w, output.SessionToken, output.ExpiresAt)
+
+	util.WriteJSON(w, http.StatusOK, dto.LoginResponse{
+		ExpiresAt:   output.ExpiresAt.UTC().Format(time.RFC3339),
+		UserID:      output.UserID,
+		Email:       output.Email,
+		Name:        output.Name,
+		TOTPEnabled: output.TOTPEnabled,
 	})
 }
 
 func (c *AuthController) HandleLogout(w http.ResponseWriter, r *http.Request, _ domain.Session) {
-	token := bearerToken(r.Header.Get("Authorization"))
+	token := c.sessionTokenFromRequest(r)
 	if token == "" {
-		writeError(w, http.StatusUnauthorized, "unauthorized", "missing bearer token")
+		util.WriteError(w, http.StatusUnauthorized, "unauthorized", "missing session token")
 		return
 	}
 	if err := c.auth.Logout(r.Context(), token); err != nil {
-		writeError(w, http.StatusUnauthorized, "unauthorized", "session already expired or revoked")
+		util.WriteError(w, http.StatusUnauthorized, "unauthorized", "session already expired or revoked")
 		return
 	}
 
-	writeJSON(w, http.StatusOK, dto.LogoutResponse{Status: "logged_out"})
+	c.clearSessionCookie(w)
+	util.WriteJSON(w, http.StatusOK, dto.LogoutResponse{Status: "logged_out"})
+}
+
+func (c *AuthController) HandleMe(w http.ResponseWriter, _ *http.Request, session domain.Session) {
+	util.WriteJSON(w, http.StatusOK, dto.SessionResponse{
+		ExpiresAt:   session.ExpiresAt.UTC().Format(time.RFC3339),
+		UserID:      session.UserID,
+		Email:       session.Email,
+		Name:        session.Name,
+		TOTPEnabled: session.TOTPEnabled,
+	})
 }
 
 func (c *AuthController) HandleTOTPSetup(w http.ResponseWriter, r *http.Request, session domain.Session) {
 	setup, err := c.auth.BeginTOTPSetup(r.Context(), session.UserID, session.Email)
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, "internal_error", "failed to initialize totp")
+		util.WriteError(w, http.StatusInternalServerError, "internal_error", "failed to initialize totp")
 		return
 	}
-	writeJSON(w, http.StatusOK, dto.TOTPSetupResponse{Secret: setup.Secret, OTPAuthURL: setup.OTPAuthURL})
+	util.WriteJSON(w, http.StatusOK, dto.TOTPSetupResponse{Secret: setup.Secret, OTPAuthURL: setup.OTPAuthURL})
 }
 
 func (c *AuthController) HandleTOTPEnable(w http.ResponseWriter, r *http.Request, session domain.Session) {
 	var req dto.TOTPCodeRequest
-	if err := readJSON(r, &req); err != nil {
-		writeError(w, http.StatusBadRequest, "invalid_json", "invalid request body")
+	if err := util.ReadJSON(r, &req); err != nil {
+		util.WriteError(w, http.StatusBadRequest, "invalid_json", "invalid request body")
 		return
 	}
 
@@ -133,18 +162,18 @@ func (c *AuthController) HandleTOTPEnable(w http.ResponseWriter, r *http.Request
 	if err != nil {
 		switch {
 		case errors.Is(err, domain.ErrInvalidMFA):
-			writeError(w, http.StatusUnauthorized, "invalid_mfa", "invalid totp code")
+			util.WriteError(w, http.StatusUnauthorized, "invalid_mfa", "invalid totp code")
 		case errors.Is(err, domain.ErrMFARateLimited):
-			writeError(w, http.StatusTooManyRequests, "mfa_rate_limited", "too many invalid mfa attempts, try again later")
+			util.WriteError(w, http.StatusTooManyRequests, "mfa_rate_limited", "too many invalid mfa attempts, try again later")
 		case errors.Is(err, domain.ErrMissingTOTPSecret):
-			writeError(w, http.StatusBadRequest, "totp_not_initialized", "totp setup required before enable")
+			util.WriteError(w, http.StatusBadRequest, "totp_not_initialized", "totp setup required before enable")
 		default:
-			writeError(w, http.StatusInternalServerError, "internal_error", "failed to enable totp")
+			util.WriteError(w, http.StatusInternalServerError, "internal_error", "failed to enable totp")
 		}
 		return
 	}
 
-	writeJSON(w, http.StatusOK, dto.TOTPEnableResponse{
+	util.WriteJSON(w, http.StatusOK, dto.TOTPEnableResponse{
 		Status:        "totp_enabled",
 		RecoveryCodes: recoveryCodes,
 	})
@@ -152,83 +181,73 @@ func (c *AuthController) HandleTOTPEnable(w http.ResponseWriter, r *http.Request
 
 func (c *AuthController) HandleTOTPVerify(w http.ResponseWriter, r *http.Request, session domain.Session) {
 	var req dto.TOTPCodeRequest
-	if err := readJSON(r, &req); err != nil {
-		writeError(w, http.StatusBadRequest, "invalid_json", "invalid request body")
+	if err := util.ReadJSON(r, &req); err != nil {
+		util.WriteError(w, http.StatusBadRequest, "invalid_json", "invalid request body")
 		return
 	}
 
 	if err := c.auth.VerifyTOTPForSession(r.Context(), session.UserID, req.Code); err != nil {
 		switch {
 		case errors.Is(err, domain.ErrInvalidMFA):
-			writeError(w, http.StatusUnauthorized, "invalid_mfa", "invalid totp code")
+			util.WriteError(w, http.StatusUnauthorized, "invalid_mfa", "invalid totp code")
 		case errors.Is(err, domain.ErrMFARateLimited):
-			writeError(w, http.StatusTooManyRequests, "mfa_rate_limited", "too many invalid mfa attempts, try again later")
+			util.WriteError(w, http.StatusTooManyRequests, "mfa_rate_limited", "too many invalid mfa attempts, try again later")
 		case errors.Is(err, domain.ErrMissingTOTPSecret):
-			writeError(w, http.StatusBadRequest, "totp_not_enabled", "totp is not enabled")
+			util.WriteError(w, http.StatusBadRequest, "totp_not_enabled", "totp is not enabled")
 		default:
-			writeError(w, http.StatusInternalServerError, "internal_error", "failed to verify totp")
+			util.WriteError(w, http.StatusInternalServerError, "internal_error", "failed to verify totp")
 		}
 		return
 	}
 
-	writeJSON(w, http.StatusOK, dto.StatusResponse{Status: "totp_verified"})
+	util.WriteJSON(w, http.StatusOK, dto.StatusResponse{Status: "totp_verified"})
 }
 
-func (c *AuthController) WithSession(next func(http.ResponseWriter, *http.Request, domain.Session)) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		token := bearerToken(r.Header.Get("Authorization"))
-		if token == "" {
-			writeError(w, http.StatusUnauthorized, "unauthorized", "missing bearer token")
-			return
-		}
-
-		session, err := c.auth.Authenticate(r.Context(), token)
-		if err != nil {
-			writeError(w, http.StatusUnauthorized, "unauthorized", "invalid or expired session")
-			return
-		}
-
-		next(w, r, session)
+func (c *AuthController) HandleTOTPDisable(w http.ResponseWriter, r *http.Request, session domain.Session) {
+	if err := c.auth.DisableTOTP(r.Context(), session.UserID); err != nil {
+		util.WriteError(w, http.StatusInternalServerError, "internal_error", "failed to disable totp")
+		return
 	}
+	util.WriteJSON(w, http.StatusOK, dto.StatusResponse{Status: "totp_disabled"})
 }
 
-func readJSON(r *http.Request, into any) error {
-	decoder := json.NewDecoder(r.Body)
-	decoder.DisallowUnknownFields()
-	return decoder.Decode(into)
-}
-
-func writeJSON(w http.ResponseWriter, status int, payload any) {
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(status)
-	_ = json.NewEncoder(w).Encode(payload)
-}
-
-func writeError(w http.ResponseWriter, status int, code string, message string) {
-	writeJSON(w, status, dto.ErrorResponse{Error: code, Message: message})
-}
-
-func bearerToken(header string) string {
-	if header == "" {
-		return ""
-	}
-	parts := strings.SplitN(strings.TrimSpace(header), " ", 2)
-	if len(parts) != 2 {
-		return ""
-	}
-	if !strings.EqualFold(parts[0], "Bearer") {
-		return ""
-	}
-	return strings.TrimSpace(parts[1])
-}
-
-func clientIPFromRequest(r *http.Request) string {
-	forwarded := strings.TrimSpace(r.Header.Get("X-Forwarded-For"))
-	if forwarded != "" {
-		parts := strings.Split(forwarded, ",")
-		if len(parts) > 0 {
-			return strings.TrimSpace(parts[0])
+func (c *AuthController) sessionTokenFromRequest(r *http.Request) string {
+	if cookie, err := r.Cookie(c.sessionCookieName); err == nil {
+		token := strings.TrimSpace(cookie.Value)
+		if token != "" {
+			return token
 		}
 	}
-	return r.RemoteAddr
+	return util.BearerToken(r.Header.Get("Authorization"))
+}
+
+func (c *AuthController) setSessionCookie(w http.ResponseWriter, token string, expiresAt time.Time) {
+	maxAge := int(time.Until(expiresAt).Seconds())
+	if maxAge < 1 {
+		maxAge = 1
+	}
+
+	http.SetCookie(w, &http.Cookie{
+		Name:     c.sessionCookieName,
+		Value:    token,
+		Path:     "/",
+		HttpOnly: true,
+		Secure:   c.sessionCookieSecure,
+		SameSite: http.SameSiteLaxMode,
+		Expires:  expiresAt.UTC(),
+		MaxAge:   maxAge,
+	})
+}
+
+func (c *AuthController) clearSessionCookie(w http.ResponseWriter) {
+	http.SetCookie(w, &http.Cookie{
+		Name:     c.sessionCookieName,
+		Value:    "",
+		Path:     "/",
+		HttpOnly: true,
+		Secure:   c.sessionCookieSecure,
+		SameSite: http.SameSiteLaxMode,
+		Expires:  time.Unix(0, 0).UTC(),
+		MaxAge:   -1,
+	})
 }

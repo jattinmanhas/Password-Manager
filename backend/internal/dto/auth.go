@@ -34,11 +34,11 @@ type LoginRequest struct {
 }
 
 type LoginResponse struct {
-	SessionToken string `json:"session_token"`
-	ExpiresAt    string `json:"expires_at"`
-	UserID       string `json:"user_id"`
-	Email        string `json:"email"`
-	Name         string `json:"name"`
+	ExpiresAt   string `json:"expires_at"`
+	UserID      string `json:"user_id"`
+	Email       string `json:"email"`
+	Name        string `json:"name"`
+	TOTPEnabled bool   `json:"is_totp_enabled"`
 }
 
 type MFARequiredResponse struct {
@@ -49,6 +49,14 @@ type MFARequiredResponse struct {
 
 type LogoutResponse struct {
 	Status string `json:"status"`
+}
+
+type SessionResponse struct {
+	ExpiresAt   string `json:"expires_at"`
+	UserID      string `json:"user_id"`
+	Email       string `json:"email"`
+	Name        string `json:"name"`
+	TOTPEnabled bool   `json:"is_totp_enabled"`
 }
 
 type TOTPSetupResponse struct {

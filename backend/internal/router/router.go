@@ -1,7 +1,6 @@
 package router
 
 import (
-	"encoding/json"
 	"net/http"
 	"strings"
 	"time"
@@ -11,6 +10,7 @@ import (
 	"pmv2/backend/internal/dto"
 	"pmv2/backend/internal/middlewares"
 	"pmv2/backend/internal/service"
+	"pmv2/backend/internal/util"
 
 	"golang.org/x/time/rate"
 )
@@ -61,7 +61,11 @@ func (g routeGroup) Handle(method string, path string, handler http.HandlerFunc,
 }
 
 func NewRouter(cfg config.Config, authService *service.AuthService) http.Handler {
-	authController := controller.NewAuthController(authService)
+	authController := controller.NewAuthController(authService, controller.AuthCookieConfig{
+		Name:   cfg.SessionCookieName,
+		Secure: isProductionEnv(cfg.Env),
+	})
+	authMiddleware := middlewares.NewAuthMiddleware(authService, cfg.SessionCookieName)
 	mux := http.NewServeMux()
 
 	authLimiter := middlewares.NewRateLimiter(rate.Limit(5), 15)
@@ -70,7 +74,7 @@ func NewRouter(cfg config.Config, authService *service.AuthService) http.Handler
 	auth := v1.Group("/auth")
 
 	root.Handle(http.MethodGet, "/healthz", func(w http.ResponseWriter, r *http.Request) {
-		writeJSON(w, http.StatusOK, dto.HealthResponse{
+		util.WriteJSON(w, http.StatusOK, dto.HealthResponse{
 			Status:  "ok",
 			Service: "pmv2-api",
 			Time:    time.Now().UTC().Format(time.RFC3339),
@@ -80,16 +84,18 @@ func NewRouter(cfg config.Config, authService *service.AuthService) http.Handler
 
 	auth.Handle(http.MethodPost, "/register", authController.HandleRegister, authLimiter.Middleware)
 	auth.Handle(http.MethodPost, "/login", authController.HandleLogin, authLimiter.Middleware)
-	auth.Handle(http.MethodPost, "/logout", authController.WithSession(authController.HandleLogout))
-	auth.Handle(http.MethodPost, "/totp/setup", authController.WithSession(authController.HandleTOTPSetup))
-	auth.Handle(http.MethodPost, "/totp/enable", authController.WithSession(authController.HandleTOTPEnable))
-	auth.Handle(http.MethodPost, "/totp/verify", authController.WithSession(authController.HandleTOTPVerify))
+	auth.Handle(http.MethodGet, "/me", authMiddleware.WithSession(authController.HandleMe))
+	auth.Handle(http.MethodPost, "/logout", authMiddleware.WithSession(authController.HandleLogout))
+	auth.Handle(http.MethodPost, "/totp/setup", authMiddleware.WithSession(authController.HandleTOTPSetup))
+	auth.Handle(http.MethodPost, "/totp/enable", authMiddleware.WithSession(authController.HandleTOTPEnable))
+	auth.Handle(http.MethodPost, "/totp/verify", authMiddleware.WithSession(authController.HandleTOTPVerify))
+	auth.Handle(http.MethodPost, "/totp/disable", authMiddleware.WithSession(authController.HandleTOTPDisable))
 
 	root.Handle("", "/", func(w http.ResponseWriter, r *http.Request) {
-		writeJSON(w, http.StatusNotFound, dto.ErrorResponse{Error: "not_found", Message: "route not found"})
+		util.WriteJSON(w, http.StatusNotFound, dto.ErrorResponse{Error: "not_found", Message: "route not found"})
 	})
 
-	return middlewares.CORS(withSecurityHeaders(mux))
+	return middlewares.CORS(cfg.FrontendOrigin, middlewares.WithSecurityHeaders(mux))
 }
 
 func joinPath(prefix string, path string) string {
@@ -108,17 +114,7 @@ func joinPath(prefix string, path string) string {
 	}
 }
 
-func writeJSON(w http.ResponseWriter, status int, payload any) {
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(status)
-	_ = json.NewEncoder(w).Encode(payload)
-}
-
-func withSecurityHeaders(next http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("X-Content-Type-Options", "nosniff")
-		w.Header().Set("X-Frame-Options", "DENY")
-		w.Header().Set("Referrer-Policy", "same-origin")
-		next.ServeHTTP(w, r)
-	})
+func isProductionEnv(env string) bool {
+	normalized := strings.ToLower(strings.TrimSpace(env))
+	return normalized == "prod" || normalized == "production"
 }

@@ -17,6 +17,7 @@ type mockAuthRepo struct {
 	revokeSessionFn         func(ctx context.Context, tokenHash []byte) (bool, error)
 	setTOTPSecretFn         func(ctx context.Context, userID string, secretEnc []byte) (bool, error)
 	enableTOTPFn            func(ctx context.Context, userID string) error
+	disableTOTPFn           func(ctx context.Context, userID string) error
 	getTOTPStateFn          func(ctx context.Context, userID string) (domain.TOTPState, error)
 	recordTOTPFailureFn     func(ctx context.Context, userID string, now time.Time, maxAttempts int, window time.Duration, lockDuration time.Duration) (*time.Time, error)
 	resetTOTPFailuresFn     func(ctx context.Context, userID string) error
@@ -70,6 +71,12 @@ func (m *mockAuthRepo) SetTOTPSecret(ctx context.Context, userID string, secretE
 func (m *mockAuthRepo) EnableTOTP(ctx context.Context, userID string) error {
 	if m.enableTOTPFn != nil {
 		return m.enableTOTPFn(ctx, userID)
+	}
+	return nil
+}
+func (m *mockAuthRepo) DisableTOTP(ctx context.Context, userID string) error {
+	if m.disableTOTPFn != nil {
+		return m.disableTOTPFn(ctx, userID)
 	}
 	return nil
 }
