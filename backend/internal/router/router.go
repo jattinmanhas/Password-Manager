@@ -60,11 +60,12 @@ func (g routeGroup) Handle(method string, path string, handler http.HandlerFunc,
 	g.mux.HandleFunc(pattern, handler)
 }
 
-func NewRouter(cfg config.Config, authService *service.AuthService) http.Handler {
+func NewRouter(cfg config.Config, authService *service.AuthService, vaultService *service.VaultService) http.Handler {
 	authController := controller.NewAuthController(authService, controller.AuthCookieConfig{
 		Name:   cfg.SessionCookieName,
 		Secure: isProductionEnv(cfg.Env),
 	})
+	vaultController := controller.NewVaultController(vaultService)
 	authMiddleware := middlewares.NewAuthMiddleware(authService, cfg.SessionCookieName)
 	mux := http.NewServeMux()
 
@@ -72,6 +73,7 @@ func NewRouter(cfg config.Config, authService *service.AuthService) http.Handler
 	root := newRouteGroup(mux, "/")
 	v1 := root.Group("/api/v1")
 	auth := v1.Group("/auth")
+	vault := v1.Group("/vault")
 
 	root.Handle(http.MethodGet, "/healthz", func(w http.ResponseWriter, r *http.Request) {
 		util.WriteJSON(w, http.StatusOK, dto.HealthResponse{
@@ -90,6 +92,11 @@ func NewRouter(cfg config.Config, authService *service.AuthService) http.Handler
 	auth.Handle(http.MethodPost, "/totp/enable", authMiddleware.WithSession(authController.HandleTOTPEnable))
 	auth.Handle(http.MethodPost, "/totp/verify", authMiddleware.WithSession(authController.HandleTOTPVerify))
 	auth.Handle(http.MethodPost, "/totp/disable", authMiddleware.WithSession(authController.HandleTOTPDisable))
+	vault.Handle(http.MethodPost, "/items", authMiddleware.WithSession(vaultController.HandleCreateItem))
+	vault.Handle(http.MethodGet, "/items", authMiddleware.WithSession(vaultController.HandleListItems))
+	vault.Handle(http.MethodGet, "/items/{item_id}", authMiddleware.WithSession(vaultController.HandleGetItem))
+	vault.Handle(http.MethodPut, "/items/{item_id}", authMiddleware.WithSession(vaultController.HandleUpdateItem))
+	vault.Handle(http.MethodDelete, "/items/{item_id}", authMiddleware.WithSession(vaultController.HandleDeleteItem))
 
 	root.Handle("", "/", func(w http.ResponseWriter, r *http.Request) {
 		util.WriteJSON(w, http.StatusNotFound, dto.ErrorResponse{Error: "not_found", Message: "route not found"})

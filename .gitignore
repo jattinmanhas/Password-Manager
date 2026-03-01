@@ -20,3 +20,5 @@ node_modules/
 *.out
 
 docs/
+
+*.agents

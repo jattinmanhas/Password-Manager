@@ -63,11 +63,14 @@ CREATE TABLE IF NOT EXISTS vault_items (
   ciphertext BYTEA NOT NULL,
   nonce BYTEA NOT NULL,
   dek_wrapped BYTEA NOT NULL,
+  wrap_nonce BYTEA NOT NULL,
   algo_version TEXT NOT NULL,
   metadata JSONB,
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
+
+ALTER TABLE IF EXISTS vault_items ADD COLUMN IF NOT EXISTS wrap_nonce BYTEA;
 
 CREATE TABLE IF NOT EXISTS vault_shares (
   item_id UUID NOT NULL REFERENCES vault_items(id) ON DELETE CASCADE,

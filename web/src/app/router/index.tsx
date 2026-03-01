@@ -5,6 +5,7 @@ import { Login } from "../../features/auth/pages/Login";
 import { Register } from "../../features/auth/pages/Register";
 import { TOTPSetup } from "../../features/auth/pages/TOTPSetup";
 import { Dashboard } from "../../features/dashboard/pages/Dashboard";
+import { Vault } from "../../features/vault/pages/Vault";
 import { useAuth } from "../providers/AuthProvider";
 import { NotFound } from "../../features/shared/pages/NotFound";
 import { ErrorBoundary } from "../../features/shared/pages/ErrorBoundary";
@@ -44,7 +45,7 @@ const router = createBrowserRouter([
                     },
                     {
                         path: "/vault",
-                        element: <div>Vault Placeholder</div>
+                        element: <Vault />
                     },
                     {
                         path: "/shared",

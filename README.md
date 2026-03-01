@@ -26,10 +26,11 @@ This repository contains the initial scaffold for a low-cost, self-hosted passwo
 - Backend:
   - PostgreSQL schema bootstrap on startup.
   - Auth endpoints with Argon2id password hashing.
-  - TOTP setup/enable/verify endpoints.
+  - TOTP setup/enable/verify/disable endpoints.
   - Session token issuance + hashed session token storage.
 - Web:
-  - Client-side crypto module scaffold for Argon2id KDF + XChaCha20-Poly1305.
+  - Login/register/session bootstrap and TOTP setup flows wired to backend auth endpoints.
+  - Client-side crypto module implemented for Argon2id KDF + XChaCha20-Poly1305 with validation hardening.
 
 ## Quick Start
 

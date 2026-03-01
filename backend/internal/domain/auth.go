@@ -16,6 +16,7 @@ var (
 	ErrMFARateLimited      = errors.New("mfa attempts rate limited")
 	ErrUnauthorizedSession = errors.New("unauthorized")
 	ErrMissingTOTPSecret   = errors.New("totp secret not configured")
+	ErrInvalidVaultPayload = errors.New("invalid vault payload")
 	ErrNotFound            = errors.New("not found")
 )
 
