@@ -6,6 +6,12 @@ import {
     SessionResponse,
     TOTPSetupResponse,
     TOTPEnableResponse,
+    RecoverySetupRequest,
+    RecoverySetupResponse,
+    RecoveryVerifyRequest,
+    RecoveryVerifyResponse,
+    RecoveryResetRequest,
+    RecoveryResetResponse,
 } from "../types";
 
 import { request, ApiError } from "../../../lib/api";
@@ -36,5 +42,14 @@ export const authService = {
     },
     disableTOTP() {
         return request<void>("POST", "/auth/totp/disable");
+    },
+    setupRecovery(req: RecoverySetupRequest) {
+        return request<RecoverySetupResponse>("POST", "/auth/recovery/setup", req);
+    },
+    verifyRecovery(req: RecoveryVerifyRequest) {
+        return request<RecoveryVerifyResponse>("POST", "/auth/recovery/verify", req);
+    },
+    resetPassword(req: RecoveryResetRequest) {
+        return request<RecoveryResetResponse>("POST", "/auth/recovery/reset", req);
     },
 };

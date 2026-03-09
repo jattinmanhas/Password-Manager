@@ -53,3 +53,38 @@ export interface TOTPEnableResponse {
 export interface StatusResponse {
     status: string;
 }
+
+export interface RecoverySetupRequest {
+    recovery_key_hash: string;
+    wrapped_kek?: string;
+    wrap_nonce?: string;
+    kek_salt?: string;
+}
+
+export interface RecoverySetupResponse {
+    status: string;
+}
+
+export interface RecoveryVerifyRequest {
+    email: string;
+    recovery_key: string;
+    totp_code?: string;
+}
+
+export interface RecoveryVerifyResponse {
+    recovery_token: string;
+    expires_at: string;
+    wrapped_kek?: string;
+    wrap_nonce?: string;
+    kek_salt?: string;
+}
+
+export interface RecoveryResetRequest {
+    recovery_token: string;
+    new_password: string;
+}
+
+export interface RecoveryResetResponse {
+    status: string;
+    user_id: string;
+}

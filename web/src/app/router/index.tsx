@@ -4,6 +4,8 @@ import { DashboardLayout } from "../../components/layout/DashboardLayout";
 import { Login } from "../../features/auth/pages/Login";
 import { Register } from "../../features/auth/pages/Register";
 import { TOTPSetup } from "../../features/auth/pages/TOTPSetup";
+import { RecoverySetup } from "../../features/auth/pages/RecoverySetup";
+import { AccountRecovery } from "../../features/auth/pages/AccountRecovery";
 import { Dashboard } from "../../features/dashboard/pages/Dashboard";
 import { Vault } from "../../features/vault/pages/Vault";
 import { useAuth } from "../providers/AuthProvider";
@@ -68,6 +70,10 @@ const router = createBrowserRouter([
                         element: <div>Settings Placeholder</div>
                     },
                     {
+                        path: "/recovery-setup",
+                        element: <RecoverySetup />
+                    },
+                    {
                         path: "/setup-2fa",
                         element: <TOTPSetup />
                     }
@@ -87,6 +93,15 @@ const router = createBrowserRouter([
                     {
                         path: "/register",
                         element: <Register />,
+                    },
+                ],
+            },
+            {
+                element: <AuthLayout />,
+                children: [
+                    {
+                        path: "/recover",
+                        element: <AccountRecovery />,
                     },
                 ],
             },

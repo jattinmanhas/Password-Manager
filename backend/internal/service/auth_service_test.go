@@ -123,6 +123,26 @@ func (m *mockAuthRepo) DeleteExpiredSessions(ctx context.Context) (int64, error)
 	return 0, nil
 }
 
+func (m *mockAuthRepo) RevokeAllUserSessions(ctx context.Context, userID string) (int64, error) {
+	return 0, nil
+}
+
+func (m *mockAuthRepo) SetupRecovery(ctx context.Context, input domain.SetupRecoveryInput) error {
+	return nil
+}
+
+func (m *mockAuthRepo) GetRecoveryRecord(ctx context.Context, userID string) (domain.RecoveryRecord, error) {
+	return domain.RecoveryRecord{}, domain.ErrNotFound
+}
+
+func (m *mockAuthRepo) UpdateLastRecoveryAt(ctx context.Context, userID string) error {
+	return nil
+}
+
+func (m *mockAuthRepo) UpdatePassword(ctx context.Context, input domain.ResetPasswordInput) error {
+	return nil
+}
+
 func newTestAuthService(repo *mockAuthRepo) *service.AuthService {
 	return service.NewAuthService(repo, "pepper123", time.Hour, "Test Issuer")
 }

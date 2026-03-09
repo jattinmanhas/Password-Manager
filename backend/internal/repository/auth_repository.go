@@ -431,6 +431,107 @@ func (r *AuthRepository) DeleteExpiredSessions(ctx context.Context) (int64, erro
 	return affected, nil
 }
 
+func (r *AuthRepository) RevokeAllUserSessions(ctx context.Context, userID string) (int64, error) {
+	result, err := r.db.ExecContext(ctx, `
+		UPDATE sessions
+		SET revoked_at = NOW()
+		WHERE user_id = $1 AND revoked_at IS NULL
+	`, userID)
+	if err != nil {
+		return 0, fmt.Errorf("revoke all user sessions: %w", err)
+	}
+
+	affected, err := result.RowsAffected()
+	if err != nil {
+		return 0, fmt.Errorf("read rows affected: %w", err)
+	}
+	return affected, nil
+}
+
+func (r *AuthRepository) SetupRecovery(ctx context.Context, input domain.SetupRecoveryInput) error {
+	_, err := r.db.ExecContext(ctx, `
+		INSERT INTO user_recovery (user_id, recovery_key_hash, recovery_enabled, wrapped_kek, wrap_nonce, kek_salt, updated_at)
+		VALUES ($1, $2, TRUE, $3, $4, $5, NOW())
+		ON CONFLICT (user_id) DO UPDATE SET
+			recovery_key_hash = EXCLUDED.recovery_key_hash,
+			recovery_enabled = TRUE,
+			wrapped_kek = EXCLUDED.wrapped_kek,
+			wrap_nonce = EXCLUDED.wrap_nonce,
+			kek_salt = EXCLUDED.kek_salt,
+			updated_at = NOW()
+	`, input.UserID, input.RecoveryKeyHash, input.WrappedKEK, input.WrapNonce, input.KEKSalt)
+	if err != nil {
+		return fmt.Errorf("setup recovery: %w", err)
+	}
+	return nil
+}
+
+func (r *AuthRepository) GetRecoveryRecord(ctx context.Context, userID string) (domain.RecoveryRecord, error) {
+	var record domain.RecoveryRecord
+	var lastRecoveryAt sql.NullTime
+	var wrappedKEK, wrapNonce, kekSalt []byte
+	err := r.db.QueryRowContext(ctx, `
+		SELECT user_id, recovery_key_hash, recovery_enabled, last_recovery_at,
+		       wrapped_kek, wrap_nonce, kek_salt
+		FROM user_recovery
+		WHERE user_id = $1
+	`, userID).Scan(
+		&record.UserID, &record.RecoveryKeyHash, &record.RecoveryEnabled, &lastRecoveryAt,
+		&wrappedKEK, &wrapNonce, &kekSalt,
+	)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return domain.RecoveryRecord{}, domain.ErrNotFound
+		}
+		return domain.RecoveryRecord{}, fmt.Errorf("query recovery record: %w", err)
+	}
+	if lastRecoveryAt.Valid {
+		t := lastRecoveryAt.Time.UTC()
+		record.LastRecoveryAt = &t
+	}
+	record.WrappedKEK = wrappedKEK
+	record.WrapNonce = wrapNonce
+	record.KEKSalt = kekSalt
+	return record, nil
+}
+
+func (r *AuthRepository) UpdateLastRecoveryAt(ctx context.Context, userID string) error {
+	_, err := r.db.ExecContext(ctx, `
+		UPDATE user_recovery
+		SET last_recovery_at = NOW(), updated_at = NOW()
+		WHERE user_id = $1
+	`, userID)
+	if err != nil {
+		return fmt.Errorf("update last recovery at: %w", err)
+	}
+	return nil
+}
+
+func (r *AuthRepository) UpdatePassword(ctx context.Context, input domain.ResetPasswordInput) error {
+	result, err := r.db.ExecContext(ctx, `
+		UPDATE auth_credentials
+		SET
+			algo = $2,
+			params = $3,
+			salt = $4,
+			password_hash = $5,
+			updated_at = NOW()
+		WHERE user_id = $1
+	`, input.UserID, input.Algo, input.ParamsJSON, input.Salt, input.PasswordHash)
+	if err != nil {
+		return fmt.Errorf("update password: %w", err)
+	}
+
+	affected, err := result.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("read rows affected: %w", err)
+	}
+	if affected == 0 {
+		return domain.ErrNotFound
+	}
+	return nil
+}
+
 func isUniqueViolation(err error) bool {
 	var pqErr *pq.Error
 	if errors.As(err, &pqErr) {

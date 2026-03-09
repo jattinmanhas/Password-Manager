@@ -76,3 +76,38 @@ type TOTPEnableResponse struct {
 type StatusResponse struct {
 	Status string `json:"status"`
 }
+
+type RecoverySetupRequest struct {
+	RecoveryKeyHash string `json:"recovery_key_hash"`
+	WrappedKEK      string `json:"wrapped_kek"`
+	WrapNonce       string `json:"wrap_nonce"`
+	KEKSalt         string `json:"kek_salt"`
+}
+
+type RecoverySetupResponse struct {
+	Status string `json:"status"`
+}
+
+type RecoveryVerifyRequest struct {
+	Email       string `json:"email"`
+	RecoveryKey string `json:"recovery_key"`
+	TOTPCode    string `json:"totp_code"`
+}
+
+type RecoveryVerifyResponse struct {
+	RecoveryToken string `json:"recovery_token"`
+	ExpiresAt     string `json:"expires_at"`
+	WrappedKEK    string `json:"wrapped_kek,omitempty"`
+	WrapNonce     string `json:"wrap_nonce,omitempty"`
+	KEKSalt       string `json:"kek_salt,omitempty"`
+}
+
+type RecoveryResetRequest struct {
+	RecoveryToken string `json:"recovery_token"`
+	NewPassword   string `json:"new_password"`
+}
+
+type RecoveryResetResponse struct {
+	Status string `json:"status"`
+	UserID string `json:"user_id"`
+}

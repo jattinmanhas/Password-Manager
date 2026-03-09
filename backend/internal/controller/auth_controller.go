@@ -211,6 +211,158 @@ func (c *AuthController) HandleTOTPDisable(w http.ResponseWriter, r *http.Reques
 	util.WriteJSON(w, http.StatusOK, dto.StatusResponse{Status: "totp_disabled"})
 }
 
+func (c *AuthController) HandleRecoverySetup(w http.ResponseWriter, r *http.Request, session domain.Session) {
+	var req dto.RecoverySetupRequest
+	if err := util.ReadJSON(r, &req); err != nil {
+		util.WriteError(w, http.StatusBadRequest, "invalid_json", "invalid request body")
+		return
+	}
+
+	if strings.TrimSpace(req.RecoveryKeyHash) == "" {
+		util.WriteError(w, http.StatusBadRequest, "invalid_recovery_key", "recovery key hash is required")
+		return
+	}
+
+	hashBytes, err := decodeHex(req.RecoveryKeyHash)
+	if err != nil {
+		util.WriteError(w, http.StatusBadRequest, "invalid_recovery_key", "recovery key hash must be valid hex")
+		return
+	}
+
+	var wrappedKEK, wrapNonce, kekSalt []byte
+	if strings.TrimSpace(req.WrappedKEK) != "" {
+		wrappedKEK, err = decodeBase64Required(req.WrappedKEK)
+		if err != nil {
+			util.WriteError(w, http.StatusBadRequest, "invalid_wrapped_kek", "wrapped_kek must be valid base64")
+			return
+		}
+		wrapNonce, err = decodeBase64Required(req.WrapNonce)
+		if err != nil {
+			util.WriteError(w, http.StatusBadRequest, "invalid_wrap_nonce", "wrap_nonce must be valid base64")
+			return
+		}
+		kekSalt, err = decodeBase64Required(req.KEKSalt)
+		if err != nil {
+			util.WriteError(w, http.StatusBadRequest, "invalid_kek_salt", "kek_salt must be valid base64")
+			return
+		}
+	}
+
+	if err := c.auth.SetupRecovery(r.Context(), session.UserID, hashBytes, wrappedKEK, wrapNonce, kekSalt); err != nil {
+		switch {
+		case errors.Is(err, domain.ErrInvalidRecoveryKey):
+			util.WriteError(w, http.StatusBadRequest, "invalid_recovery_key", "invalid recovery key")
+		default:
+			util.WriteError(w, http.StatusInternalServerError, "internal_error", "failed to setup recovery")
+		}
+		return
+	}
+
+	util.WriteJSON(w, http.StatusOK, dto.RecoverySetupResponse{Status: "recovery_configured"})
+}
+
+func (c *AuthController) HandleRecoveryVerify(w http.ResponseWriter, r *http.Request) {
+	var req dto.RecoveryVerifyRequest
+	if err := util.ReadJSON(r, &req); err != nil {
+		util.WriteError(w, http.StatusBadRequest, "invalid_json", "invalid request body")
+		return
+	}
+
+	token, expiresAt, recoveryRecord, err := c.auth.VerifyRecoveryKey(r.Context(), req.Email, req.RecoveryKey, req.TOTPCode)
+	if err != nil {
+		switch {
+		case errors.Is(err, domain.ErrInvalidCredentials):
+			util.WriteError(w, http.StatusUnauthorized, "invalid_credentials", "invalid email")
+		case errors.Is(err, domain.ErrInvalidRecoveryKey):
+			util.WriteError(w, http.StatusUnauthorized, "invalid_recovery_key", "invalid recovery key")
+		case errors.Is(err, domain.ErrRecoveryNotSetup):
+			util.WriteError(w, http.StatusBadRequest, "recovery_not_setup", "account recovery is not configured")
+		case errors.Is(err, domain.ErrRecoveryCooldown):
+			util.WriteError(w, http.StatusTooManyRequests, "recovery_cooldown", "recovery attempted too recently, try again later")
+		case errors.Is(err, domain.ErrMFARequired):
+			util.WriteJSON(w, http.StatusUnauthorized, dto.MFARequiredResponse{
+				Error:       "mfa_required",
+				Message:     "totp code is required for recovery",
+				MFARequired: true,
+			})
+		case errors.Is(err, domain.ErrInvalidMFA):
+			util.WriteError(w, http.StatusUnauthorized, "invalid_mfa", "invalid totp code")
+		case errors.Is(err, domain.ErrMFARateLimited):
+			util.WriteError(w, http.StatusTooManyRequests, "mfa_rate_limited", "too many invalid mfa attempts, try again later")
+		default:
+			util.WriteError(w, http.StatusInternalServerError, "internal_error", "failed to verify recovery key")
+		}
+		return
+	}
+
+	resp := dto.RecoveryVerifyResponse{
+		RecoveryToken: token,
+		ExpiresAt:     expiresAt.UTC().Format(time.RFC3339),
+	}
+	if recoveryRecord != nil && len(recoveryRecord.WrappedKEK) > 0 {
+		resp.WrappedKEK = encodeBase64(recoveryRecord.WrappedKEK)
+		resp.WrapNonce = encodeBase64(recoveryRecord.WrapNonce)
+		resp.KEKSalt = encodeBase64(recoveryRecord.KEKSalt)
+	}
+	util.WriteJSON(w, http.StatusOK, resp)
+}
+
+func (c *AuthController) HandleRecoveryReset(w http.ResponseWriter, r *http.Request) {
+	var req dto.RecoveryResetRequest
+	if err := util.ReadJSON(r, &req); err != nil {
+		util.WriteError(w, http.StatusBadRequest, "invalid_json", "invalid request body")
+		return
+	}
+
+	userID, err := c.auth.ResetPassword(r.Context(), req.RecoveryToken, req.NewPassword)
+	if err != nil {
+		switch {
+		case errors.Is(err, domain.ErrInvalidRecoveryToken):
+			util.WriteError(w, http.StatusUnauthorized, "invalid_recovery_token", "invalid or expired recovery token")
+		case errors.Is(err, domain.ErrWeakPassword):
+			util.WriteError(w, http.StatusBadRequest, "weak_password", "password does not meet complexity requirements")
+		default:
+			util.WriteError(w, http.StatusInternalServerError, "internal_error", "failed to reset password")
+		}
+		return
+	}
+
+	util.WriteJSON(w, http.StatusOK, dto.RecoveryResetResponse{
+		Status: "password_reset",
+		UserID: userID,
+	})
+}
+
+func decodeHex(value string) ([]byte, error) {
+	trimmed := strings.TrimSpace(value)
+	if trimmed == "" {
+		return nil, errors.New("empty hex string")
+	}
+	raw := make([]byte, len(trimmed)/2)
+	for i := 0; i < len(raw); i++ {
+		high := hexVal(trimmed[2*i])
+		low := hexVal(trimmed[2*i+1])
+		if high < 0 || low < 0 {
+			return nil, errors.New("invalid hex character")
+		}
+		raw[i] = byte(high<<4 | low)
+	}
+	return raw, nil
+}
+
+func hexVal(c byte) int {
+	switch {
+	case c >= '0' && c <= '9':
+		return int(c - '0')
+	case c >= 'a' && c <= 'f':
+		return int(c - 'a' + 10)
+	case c >= 'A' && c <= 'F':
+		return int(c - 'A' + 10)
+	default:
+		return -1
+	}
+}
+
 func (c *AuthController) sessionTokenFromRequest(r *http.Request) string {
 	if cookie, err := r.Cookie(c.sessionCookieName); err == nil {
 		token := strings.TrimSpace(cookie.Value)

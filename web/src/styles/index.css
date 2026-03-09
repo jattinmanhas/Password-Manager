@@ -24,7 +24,7 @@
 }
 
 body {
-  font-family: system-ui, -apple-system, sans-serif;
+  font-family: "Inter", "Segoe UI", -apple-system, BlinkMacSystemFont, "Helvetica Neue", Arial, sans-serif;
   background-color: var(--color-soft-gray);
   color: var(--color-text-main);
   -webkit-font-smoothing: antialiased;
@@ -446,3 +446,4 @@ ul {
     transform: translateY(0) scale(1);
   }
 }
+

@@ -139,9 +139,9 @@ export function Login() {
                 <div className="form-group">
                     <div className="form-row">
                         <Label htmlFor="password">Password</Label>
-                        <span style={{ fontSize: "0.875rem", color: "var(--color-text-subtle)" }}>
-                            Password reset coming soon
-                        </span>
+                        <Link to="/recover" style={{ fontSize: "0.875rem", color: "var(--color-text-subtle)" }}>
+                            Forgot password?
+                        </Link>
                     </div>
                     <div className="input-wrapper">
                         <Input

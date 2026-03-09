@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"crypto/subtle"
 	"errors"
 	"fmt"
 	"time"
@@ -358,4 +359,157 @@ func (s *AuthService) generateAndStoreRecoveryCodes(ctx context.Context, userID 
 
 func (s *AuthService) isMFALocked(lockedUntil *time.Time, now time.Time) bool {
 	return lockedUntil != nil && lockedUntil.UTC().After(now.UTC())
+}
+
+const recoveryCooldown = 1 * time.Hour
+const recoveryTokenTTL = 15 * time.Minute
+
+func (s *AuthService) SetupRecovery(ctx context.Context, userID string, recoveryKeyHash []byte, wrappedKEK []byte, wrapNonce []byte, kekSalt []byte) error {
+	if len(recoveryKeyHash) == 0 {
+		return domain.ErrInvalidRecoveryKey
+	}
+
+	return s.repo.SetupRecovery(ctx, domain.SetupRecoveryInput{
+		UserID:          userID,
+		RecoveryKeyHash: recoveryKeyHash,
+		WrappedKEK:      wrappedKEK,
+		WrapNonce:       wrapNonce,
+		KEKSalt:         kekSalt,
+	})
+}
+
+func (s *AuthService) VerifyRecoveryKey(ctx context.Context, email string, recoveryKey string, totpCode string) (string, time.Time, *domain.RecoveryRecord, error) {
+	normalizedEmail := util.NormalizeEmail(email)
+	if normalizedEmail == "" {
+		return "", time.Time{}, nil, domain.ErrInvalidCredentials
+	}
+	if util.TrimOrEmpty(recoveryKey) == "" {
+		return "", time.Time{}, nil, domain.ErrInvalidRecoveryKey
+	}
+
+	record, err := s.repo.GetUserAuthByEmail(ctx, normalizedEmail)
+	if err != nil {
+		if errors.Is(err, domain.ErrNotFound) {
+			return "", time.Time{}, nil, domain.ErrInvalidCredentials
+		}
+		return "", time.Time{}, nil, fmt.Errorf("read auth record for recovery: %w", err)
+	}
+
+	recoveryRecord, err := s.repo.GetRecoveryRecord(ctx, record.UserID)
+	if err != nil {
+		if errors.Is(err, domain.ErrNotFound) {
+			return "", time.Time{}, nil, domain.ErrRecoveryNotSetup
+		}
+		return "", time.Time{}, nil, fmt.Errorf("read recovery record: %w", err)
+	}
+
+	if !recoveryRecord.RecoveryEnabled {
+		return "", time.Time{}, nil, domain.ErrRecoveryNotSetup
+	}
+
+	nowUTC := s.now().UTC()
+	if recoveryRecord.LastRecoveryAt != nil && nowUTC.Sub(*recoveryRecord.LastRecoveryAt) < recoveryCooldown {
+		return "", time.Time{}, nil, domain.ErrRecoveryCooldown
+	}
+
+	keyHash := util.HashRecoveryKey(recoveryKey, s.pepper)
+	if subtle.ConstantTimeCompare(keyHash, recoveryRecord.RecoveryKeyHash) != 1 {
+		return "", time.Time{}, nil, domain.ErrInvalidRecoveryKey
+	}
+
+	if record.TOTPEnabled {
+		if s.isMFALocked(record.TOTPLockedUntil, nowUTC) {
+			return "", time.Time{}, nil, domain.ErrMFARateLimited
+		}
+
+		trimmedCode := util.TrimOrEmpty(totpCode)
+		if trimmedCode == "" {
+			return "", time.Time{}, nil, domain.ErrMFARequired
+		}
+
+		secret, err := util.ParseStoredTOTPSecret(record.TOTPSecretEnc, s.totpSecretKey)
+		if err != nil {
+			return "", time.Time{}, nil, fmt.Errorf("decode totp secret for recovery: %w", err)
+		}
+		if !util.VerifyTOTP(secret, trimmedCode, nowUTC) {
+			return "", time.Time{}, nil, s.recordMFAFailure(ctx, record.UserID, nowUTC)
+		}
+		if err := s.repo.ResetTOTPFailures(ctx, record.UserID); err != nil {
+			return "", time.Time{}, nil, fmt.Errorf("reset totp failures after recovery verify: %w", err)
+		}
+	}
+
+	recoveryToken, err := util.NewOpaqueToken(32)
+	if err != nil {
+		return "", time.Time{}, nil, err
+	}
+
+	sessionID, err := util.NewUUID()
+	if err != nil {
+		return "", time.Time{}, nil, err
+	}
+
+	expiresAt := nowUTC.Add(recoveryTokenTTL)
+	err = s.repo.CreateSession(ctx, domain.CreateSessionInput{
+		SessionID:  sessionID,
+		UserID:     record.UserID,
+		TokenHash:  util.HashToken(recoveryToken, s.pepper),
+		DeviceName: "recovery",
+		ExpiresAt:  expiresAt,
+	})
+	if err != nil {
+		return "", time.Time{}, nil, fmt.Errorf("create recovery session: %w", err)
+	}
+
+	return recoveryToken, expiresAt, &recoveryRecord, nil
+}
+
+func (s *AuthService) ResetPassword(ctx context.Context, recoveryToken string, newPassword string) (string, error) {
+	if util.TrimOrEmpty(recoveryToken) == "" {
+		return "", domain.ErrInvalidRecoveryToken
+	}
+
+	session, err := s.repo.GetActiveSessionByTokenHash(ctx, util.HashToken(recoveryToken, s.pepper))
+	if err != nil {
+		if errors.Is(err, domain.ErrNotFound) {
+			return "", domain.ErrInvalidRecoveryToken
+		}
+		return "", fmt.Errorf("validate recovery token: %w", err)
+	}
+
+	if err := util.ValidatePasswordStrength(newPassword); err != nil {
+		return "", err
+	}
+
+	params := util.DefaultArgon2Params()
+	paramsJSON, err := util.MarshalArgon2Params(params)
+	if err != nil {
+		return "", fmt.Errorf("marshal argon2 params: %w", err)
+	}
+
+	salt, passwordHash, err := util.HashPassword(newPassword, params)
+	if err != nil {
+		return "", err
+	}
+
+	err = s.repo.UpdatePassword(ctx, domain.ResetPasswordInput{
+		UserID:       session.UserID,
+		Algo:         "argon2id",
+		ParamsJSON:   paramsJSON,
+		Salt:         salt,
+		PasswordHash: passwordHash,
+	})
+	if err != nil {
+		return "", fmt.Errorf("update password: %w", err)
+	}
+
+	if _, err := s.repo.RevokeAllUserSessions(ctx, session.UserID); err != nil {
+		return "", fmt.Errorf("revoke sessions after recovery: %w", err)
+	}
+
+	if err := s.repo.UpdateLastRecoveryAt(ctx, session.UserID); err != nil {
+		return "", fmt.Errorf("update last recovery timestamp: %w", err)
+	}
+
+	return session.UserID, nil
 }

@@ -272,3 +272,9 @@ func HashRecoveryCode(code string, pepper string) []byte {
 	sum := sha256.Sum256([]byte("pmv2:recovery-code:" + pepper + ":" + normalized))
 	return sum[:]
 }
+
+func HashRecoveryKey(key string, pepper string) []byte {
+	normalized := strings.TrimSpace(key)
+	sum := sha256.Sum256([]byte("pmv2:recovery-key:" + pepper + ":" + normalized))
+	return sum[:]
+}

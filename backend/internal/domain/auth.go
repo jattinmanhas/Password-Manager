@@ -7,17 +7,21 @@ import (
 )
 
 var (
-	ErrEmailTaken          = errors.New("email already registered")
-	ErrInvalidCredentials  = errors.New("invalid credentials")
-	ErrWeakPassword        = errors.New("password does not meet complexity requirements")
-	ErrMFARequired         = errors.New("mfa required")
-	ErrInvalidMFA          = errors.New("invalid totp code")
-	ErrInvalidMFAInput     = errors.New("invalid mfa input")
-	ErrMFARateLimited      = errors.New("mfa attempts rate limited")
-	ErrUnauthorizedSession = errors.New("unauthorized")
-	ErrMissingTOTPSecret   = errors.New("totp secret not configured")
-	ErrInvalidVaultPayload = errors.New("invalid vault payload")
-	ErrNotFound            = errors.New("not found")
+	ErrEmailTaken           = errors.New("email already registered")
+	ErrInvalidCredentials   = errors.New("invalid credentials")
+	ErrWeakPassword         = errors.New("password does not meet complexity requirements")
+	ErrMFARequired          = errors.New("mfa required")
+	ErrInvalidMFA           = errors.New("invalid totp code")
+	ErrInvalidMFAInput      = errors.New("invalid mfa input")
+	ErrMFARateLimited       = errors.New("mfa attempts rate limited")
+	ErrUnauthorizedSession  = errors.New("unauthorized")
+	ErrMissingTOTPSecret    = errors.New("totp secret not configured")
+	ErrInvalidVaultPayload  = errors.New("invalid vault payload")
+	ErrNotFound             = errors.New("not found")
+	ErrRecoveryNotSetup     = errors.New("account recovery not configured")
+	ErrInvalidRecoveryKey   = errors.New("invalid recovery key")
+	ErrRecoveryCooldown     = errors.New("recovery attempted too recently")
+	ErrInvalidRecoveryToken = errors.New("invalid or expired recovery token")
 )
 
 type Argon2Params struct {
@@ -108,12 +112,39 @@ type TOTPState struct {
 	LockedUntil    *time.Time
 }
 
+type RecoveryRecord struct {
+	UserID          string
+	RecoveryKeyHash []byte
+	RecoveryEnabled bool
+	LastRecoveryAt  *time.Time
+	WrappedKEK      []byte
+	WrapNonce       []byte
+	KEKSalt         []byte
+}
+
+type SetupRecoveryInput struct {
+	UserID          string
+	RecoveryKeyHash []byte
+	WrappedKEK      []byte
+	WrapNonce       []byte
+	KEKSalt         []byte
+}
+
+type ResetPasswordInput struct {
+	UserID       string
+	Algo         string
+	ParamsJSON   []byte
+	Salt         []byte
+	PasswordHash []byte
+}
+
 type AuthRepository interface {
 	CreateUserWithCredentials(ctx context.Context, input CreateUserInput) error
 	GetUserAuthByEmail(ctx context.Context, email string) (UserAuthRecord, error)
 	CreateSession(ctx context.Context, input CreateSessionInput) error
 	GetActiveSessionByTokenHash(ctx context.Context, tokenHash []byte) (Session, error)
 	RevokeSessionByTokenHash(ctx context.Context, tokenHash []byte) (bool, error)
+	RevokeAllUserSessions(ctx context.Context, userID string) (int64, error)
 	SetTOTPSecret(ctx context.Context, userID string, secretEnc []byte) (bool, error)
 	EnableTOTP(ctx context.Context, userID string) error
 	DisableTOTP(ctx context.Context, userID string) error
@@ -123,4 +154,8 @@ type AuthRepository interface {
 	ReplaceRecoveryCodes(ctx context.Context, userID string, codeHashes [][]byte) error
 	ConsumeRecoveryCode(ctx context.Context, userID string, codeHash []byte) (bool, error)
 	DeleteExpiredSessions(ctx context.Context) (int64, error)
+	SetupRecovery(ctx context.Context, input SetupRecoveryInput) error
+	GetRecoveryRecord(ctx context.Context, userID string) (RecoveryRecord, error)
+	UpdateLastRecoveryAt(ctx context.Context, userID string) error
+	UpdatePassword(ctx context.Context, input ResetPasswordInput) error
 }
