@@ -78,14 +78,18 @@ type StatusResponse struct {
 }
 
 type RecoverySetupRequest struct {
-	RecoveryKeyHash string `json:"recovery_key_hash"`
-	WrappedKEK      string `json:"wrapped_kek"`
-	WrapNonce       string `json:"wrap_nonce"`
-	KEKSalt         string `json:"kek_salt"`
+	RecoveryKey string `json:"recovery_key"`
+	WrappedKEK  string `json:"wrapped_kek"`
+	WrapNonce   string `json:"wrap_nonce"`
+	KEKSalt     string `json:"kek_salt"`
 }
 
 type RecoverySetupResponse struct {
 	Status string `json:"status"`
+}
+
+type RecoveryStatusResponse struct {
+	IsEnabled bool `json:"is_enabled"`
 }
 
 type RecoveryVerifyRequest struct {

@@ -38,13 +38,17 @@ func BearerToken(header string) string {
 	return strings.TrimSpace(parts[1])
 }
 
+// ClientIPFromRequest extracts the client's IP address from the request.
+// X-Forwarded-For is preferred (for proxy deployments); falls back to RemoteAddr.
+// The port suffix is always stripped so the result is safe to store in a Postgres INET column.
 func ClientIPFromRequest(r *http.Request) string {
 	forwarded := strings.TrimSpace(r.Header.Get("X-Forwarded-For"))
 	if forwarded != "" {
 		parts := strings.Split(forwarded, ",")
 		if len(parts) > 0 {
-			return strings.TrimSpace(parts[0])
+			return NormalizeIP(strings.TrimSpace(parts[0]))
 		}
 	}
-	return r.RemoteAddr
+	return NormalizeIP(r.RemoteAddr)
 }
+

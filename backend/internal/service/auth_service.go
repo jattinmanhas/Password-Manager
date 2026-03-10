@@ -364,10 +364,12 @@ func (s *AuthService) isMFALocked(lockedUntil *time.Time, now time.Time) bool {
 const recoveryCooldown = 1 * time.Hour
 const recoveryTokenTTL = 15 * time.Minute
 
-func (s *AuthService) SetupRecovery(ctx context.Context, userID string, recoveryKeyHash []byte, wrappedKEK []byte, wrapNonce []byte, kekSalt []byte) error {
-	if len(recoveryKeyHash) == 0 {
+func (s *AuthService) SetupRecovery(ctx context.Context, userID string, recoveryKey string, wrappedKEK []byte, wrapNonce []byte, kekSalt []byte) error {
+	if util.TrimOrEmpty(recoveryKey) == "" {
 		return domain.ErrInvalidRecoveryKey
 	}
+
+	recoveryKeyHash := util.HashRecoveryKey(recoveryKey, s.pepper)
 
 	return s.repo.SetupRecovery(ctx, domain.SetupRecoveryInput{
 		UserID:          userID,
@@ -376,6 +378,17 @@ func (s *AuthService) SetupRecovery(ctx context.Context, userID string, recovery
 		WrapNonce:       wrapNonce,
 		KEKSalt:         kekSalt,
 	})
+}
+
+func (s *AuthService) GetRecoveryStatus(ctx context.Context, userID string) (bool, error) {
+	record, err := s.repo.GetRecoveryRecord(ctx, userID)
+	if err != nil {
+		if errors.Is(err, domain.ErrNotFound) {
+			return false, nil
+		}
+		return false, fmt.Errorf("read recovery record: %w", err)
+	}
+	return record.RecoveryEnabled, nil
 }
 
 func (s *AuthService) VerifyRecoveryKey(ctx context.Context, email string, recoveryKey string, totpCode string) (string, time.Time, *domain.RecoveryRecord, error) {

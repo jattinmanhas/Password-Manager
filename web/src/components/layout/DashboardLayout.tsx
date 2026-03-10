@@ -22,13 +22,13 @@ export function DashboardLayout() {
         { name: "Dashboard", path: "/dashboard", icon: LayoutDashboard },
         { name: "Vault", path: "/vault", icon: Key },
         { name: "Shared Vaults", path: "/shared", icon: Users },
-        { name: "Security Health", path: "/health", icon: ShieldCheck },
         { name: "Activity", path: "/activity", icon: Activity },
     ];
 
     const secondaryNav = [
-        { name: "Family Members", path: "/family", icon: Users }, // you can use a different icon if available
-        { name: "Two-Factor Auth", path: "/setup-2fa", icon: ShieldCheck },
+        { name: "Family Members", path: "/family", icon: Users },
+        { name: "Setup Recovery", path: "/recovery-setup", icon: ShieldCheck },
+        { name: "Setup 2FA", path: "/setup-2fa", icon: ShieldCheck },
         { name: "Settings", path: "/settings", icon: Settings },
     ];
 

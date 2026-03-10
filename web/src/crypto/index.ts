@@ -126,8 +126,8 @@ export async function deriveMasterKey(input: {
   validateArgon2idParams(params);
 
   const salt = input.salt ?? randomBytes(MASTER_KEY_SALT_LENGTH);
-  if (salt.length !== MASTER_KEY_SALT_LENGTH) {
-    throw new Error(`salt must be ${MASTER_KEY_SALT_LENGTH} bytes`);
+  if (salt.length < 16) {
+    throw new Error(`salt must be at least 16 bytes`);
   }
 
   const key = await input.kdf.deriveKey({

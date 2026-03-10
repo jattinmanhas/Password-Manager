@@ -174,6 +174,22 @@ func (r *VaultRepository) DeleteVaultItemForOwner(ctx context.Context, itemID st
 	return affected > 0, nil
 }
 
+func (r *VaultRepository) GetVaultSaltForUser(ctx context.Context, userID string) ([]byte, error) {
+	var salt []byte
+	err := r.db.QueryRowContext(ctx, `
+		SELECT salt FROM auth_credentials WHERE user_id = $1
+	`, userID).Scan(&salt)
+
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, domain.ErrNotFound
+		}
+		return nil, fmt.Errorf("get vault salt: %w", err)
+	}
+
+	return salt, nil
+}
+
 func nullableJSON(raw []byte) any {
 	if len(raw) == 0 {
 		return nil

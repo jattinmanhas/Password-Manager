@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import toast from "react-hot-toast";
 import { Copy, ShieldCheck, AlertTriangle, Download, Eye, EyeOff } from "lucide-react";
 
@@ -34,13 +34,6 @@ function generateRecoveryKey(): string {
     return chunks.join("-");
 }
 
-async function hashForServer(key: string): Promise<string> {
-    const encoder = new TextEncoder();
-    const data = encoder.encode(key);
-    const hashBuffer = await crypto.subtle.digest("SHA-256", data);
-    const hashArray = Array.from(new Uint8Array(hashBuffer));
-    return hashArray.map((b) => b.toString(16).padStart(2, "0")).join("");
-}
 
 const MASTER_KEY_SALT_LENGTH = 16;
 const KEK_VERIFIER_KIND = "kek-verifier";
@@ -91,9 +84,28 @@ export function RecoverySetup() {
     const [saving, setSaving] = useState(false);
     const [error, setError] = useState("");
     const [confirmed, setConfirmed] = useState(false);
+    const [isLoadingStatus, setIsLoadingStatus] = useState(true);
 
     const [vaultPassphrase, setVaultPassphrase] = useState("");
     const [showPassphrase, setShowPassphrase] = useState(false);
+
+    useEffect(() => {
+        let isMounted = true;
+        authService.getRecoveryStatus()
+            .then((res) => {
+                if (isMounted && res.is_enabled) {
+                    setConfirmed(true);
+                }
+            })
+            .catch(() => {})
+            .finally(() => {
+                if (isMounted) {
+                    setIsLoadingStatus(false);
+                }
+            });
+        
+        return () => { isMounted = false; };
+    }, []);
 
     const handleGenerate = async () => {
         setError("");
@@ -133,8 +145,6 @@ export function RecoverySetup() {
         setError("");
 
         try {
-            const hash = await hashForServer(recoveryKey);
-
             let wrappedKekPayload: { wrapped_kek: string; wrap_nonce: string; kek_salt: string } | undefined;
 
             if (vaultPassphrase.trim()) {
@@ -161,8 +171,8 @@ export function RecoverySetup() {
 
                 const { fromBase64 } = await import("../../../crypto");
                 const salt = fromBase64(saltB64);
-                if (salt.length !== MASTER_KEY_SALT_LENGTH) {
-                    throw new Error("Vault verifier salt has unexpected length.");
+                if (salt.length < 16) {
+                    throw new Error("Vault verifier salt has invalid length.");
                 }
 
                 const derived = await deriveMasterKey({
@@ -200,7 +210,7 @@ export function RecoverySetup() {
             }
 
             await authService.setupRecovery({
-                recovery_key_hash: hash,
+                recovery_key: recoveryKey,
                 ...wrappedKekPayload,
             });
 
@@ -219,6 +229,17 @@ export function RecoverySetup() {
             setSaving(false);
         }
     };
+
+    if (isLoadingStatus) {
+        return (
+            <Card>
+                <div style={{ textAlign: "center", padding: "2rem" }}>
+                    <div className="loading-spinner" style={{ margin: "0 auto 1rem auto", color: "var(--color-security-blue)" }}></div>
+                    <p className="card-desc" style={{ marginBottom: 0 }}>Checking recovery status...</p>
+                </div>
+            </Card>
+        );
+    }
 
     if (confirmed) {
         return (
@@ -280,13 +301,13 @@ export function RecoverySetup() {
                             letterSpacing: "0.05em",
                             padding: "1.25rem",
                             borderRadius: "var(--radius-lg, 12px)",
-                            background: "var(--color-surface-elevated, rgba(255, 255, 255, 0.05))",
-                            border: "1px solid var(--color-border-subtle, rgba(255, 255, 255, 0.1))",
+                            background: "var(--color-surface-elevated, rgba(0, 0, 0, 0.03))",
+                            border: "1px solid var(--color-border-subtle, rgba(0, 0, 0, 0.08))",
                             textAlign: "center",
                             wordBreak: "break-all",
                             lineHeight: 1.8,
                             userSelect: "all",
-                            color: "var(--color-text-primary, #fff)",
+                            color: "var(--color-text-main, #0F172A)",
                         }}
                     >
                         {recoveryKey}
@@ -313,8 +334,8 @@ export function RecoverySetup() {
                         style={{
                             padding: "1rem",
                             borderRadius: "var(--radius-lg, 12px)",
-                            background: "var(--color-surface-elevated, rgba(255, 255, 255, 0.03))",
-                            border: "1px solid var(--color-border-subtle, rgba(255, 255, 255, 0.08))",
+                            background: "var(--color-surface-elevated, rgba(0, 0, 0, 0.03))",
+                            border: "1px solid var(--color-border-subtle, rgba(0, 0, 0, 0.08))",
                         }}
                     >
                         <Label htmlFor="vault-passphrase" style={{ marginBottom: "0.5rem", display: "block" }}>
@@ -357,7 +378,7 @@ export function RecoverySetup() {
                             gap: "0.5rem",
                             padding: "0.75rem",
                             borderRadius: "var(--radius-lg, 12px)",
-                            background: "var(--color-surface-elevated, rgba(255, 255, 255, 0.03))",
+                            background: "var(--color-surface-elevated, rgba(0, 0, 0, 0.03))",
                         }}
                     >
                         <input

@@ -4,6 +4,7 @@ import {
   UpdateVaultItemRequest,
   VaultItemResponse,
   VaultItemsResponse,
+  VaultSaltResponse,
 } from "../types";
 
 export const vaultService = {
@@ -21,5 +22,8 @@ export const vaultService = {
   },
   deleteItem(itemId: string) {
     return request<{ status: string }>("DELETE", `/vault/items/${itemId}`);
+  },
+  getVaultSalt() {
+    return request<VaultSaltResponse>("GET", "/vault/salt");
   },
 };

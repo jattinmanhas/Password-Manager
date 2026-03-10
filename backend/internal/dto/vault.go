@@ -35,3 +35,7 @@ type VaultItemResponse struct {
 type VaultItemsResponse struct {
 	Items []VaultItemResponse `json:"items"`
 }
+
+type VaultSaltResponse struct {
+	Salt string `json:"salt"`
+}

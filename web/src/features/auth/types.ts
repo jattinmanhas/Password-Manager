@@ -55,7 +55,7 @@ export interface StatusResponse {
 }
 
 export interface RecoverySetupRequest {
-    recovery_key_hash: string;
+    recovery_key: string;
     wrapped_kek?: string;
     wrap_nonce?: string;
     kek_salt?: string;
@@ -63,6 +63,10 @@ export interface RecoverySetupRequest {
 
 export interface RecoverySetupResponse {
     status: string;
+}
+
+export interface RecoveryStatusResponse {
+    is_enabled: boolean;
 }
 
 export interface RecoveryVerifyRequest {

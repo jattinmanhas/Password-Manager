@@ -75,6 +75,7 @@ func NewRouter(cfg config.Config, authService *service.AuthService, vaultService
 	auth := v1.Group("/auth")
 	vault := v1.Group("/vault")
 
+	// Health check
 	root.Handle(http.MethodGet, "/healthz", func(w http.ResponseWriter, r *http.Request) {
 		util.WriteJSON(w, http.StatusOK, dto.HealthResponse{
 			Status:  "ok",
@@ -84,17 +85,28 @@ func NewRouter(cfg config.Config, authService *service.AuthService, vaultService
 		})
 	})
 
+	// Auth routes - Unauthenticated
 	auth.Handle(http.MethodPost, "/register", authController.HandleRegister, authLimiter.Middleware)
 	auth.Handle(http.MethodPost, "/login", authController.HandleLogin, authLimiter.Middleware)
+	auth.Handle(http.MethodPost, "/recovery/verify", authController.HandleRecoveryVerify, authLimiter.Middleware)
+	auth.Handle(http.MethodPost, "/recovery/reset", authController.HandleRecoveryReset, authLimiter.Middleware)
+
+	// Auth routes - Authenticated
 	auth.Handle(http.MethodGet, "/me", authMiddleware.WithSession(authController.HandleMe))
 	auth.Handle(http.MethodPost, "/logout", authMiddleware.WithSession(authController.HandleLogout))
+
+	// TOTP routes
 	auth.Handle(http.MethodPost, "/totp/setup", authMiddleware.WithSession(authController.HandleTOTPSetup))
 	auth.Handle(http.MethodPost, "/totp/enable", authMiddleware.WithSession(authController.HandleTOTPEnable))
 	auth.Handle(http.MethodPost, "/totp/verify", authMiddleware.WithSession(authController.HandleTOTPVerify))
 	auth.Handle(http.MethodPost, "/totp/disable", authMiddleware.WithSession(authController.HandleTOTPDisable))
+
+	// Recovery setup
+	auth.Handle(http.MethodGet, "/recovery/status", authMiddleware.WithSession(authController.HandleGetRecoveryStatus))
 	auth.Handle(http.MethodPost, "/recovery/setup", authMiddleware.WithSession(authController.HandleRecoverySetup))
-	auth.Handle(http.MethodPost, "/recovery/verify", authController.HandleRecoveryVerify, authLimiter.Middleware)
-	auth.Handle(http.MethodPost, "/recovery/reset", authController.HandleRecoveryReset, authLimiter.Middleware)
+
+	// Vault routes
+	vault.Handle(http.MethodGet, "/salt", authMiddleware.WithSession(vaultController.HandleGetVaultSalt))
 	vault.Handle(http.MethodPost, "/items", authMiddleware.WithSession(vaultController.HandleCreateItem))
 	vault.Handle(http.MethodGet, "/items", authMiddleware.WithSession(vaultController.HandleListItems))
 	vault.Handle(http.MethodGet, "/items/{item_id}", authMiddleware.WithSession(vaultController.HandleGetItem))

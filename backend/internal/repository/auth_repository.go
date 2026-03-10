@@ -56,6 +56,7 @@ func (r *AuthRepository) CreateUserWithCredentials(ctx context.Context, input do
 
 func (r *AuthRepository) GetUserAuthByEmail(ctx context.Context, email string) (domain.UserAuthRecord, error) {
 	var record domain.UserAuthRecord
+	var name sql.NullString
 	var secret []byte
 	var windowStart sql.NullTime
 	var lockedUntil sql.NullTime
@@ -79,7 +80,7 @@ func (r *AuthRepository) GetUserAuthByEmail(ctx context.Context, email string) (
 	`, email).Scan(
 		&record.UserID,
 		&record.Email,
-		&record.Name,
+		&name,
 		&record.Salt,
 		&record.PasswordHash,
 		&record.RawParams,
@@ -96,6 +97,7 @@ func (r *AuthRepository) GetUserAuthByEmail(ctx context.Context, email string) (
 		return domain.UserAuthRecord{}, fmt.Errorf("query auth record: %w", err)
 	}
 
+	record.Name = name.String
 	record.TOTPSecretEnc = secret
 	if windowStart.Valid {
 		t := windowStart.Time.UTC()
@@ -127,6 +129,7 @@ func (r *AuthRepository) CreateSession(ctx context.Context, input domain.CreateS
 
 func (r *AuthRepository) GetActiveSessionByTokenHash(ctx context.Context, tokenHash []byte) (domain.Session, error) {
 	var session domain.Session
+	var name sql.NullString
 	err := r.db.QueryRowContext(ctx, `
 		SELECT s.id, s.user_id, u.email, u.name, ac.mfa_totp_enabled, s.expires_at
 		FROM sessions s
@@ -135,13 +138,14 @@ func (r *AuthRepository) GetActiveSessionByTokenHash(ctx context.Context, tokenH
 		WHERE s.refresh_token_hash = $1
 		  AND s.revoked_at IS NULL
 		  AND s.expires_at > NOW()
-	`, tokenHash).Scan(&session.ID, &session.UserID, &session.Email, &session.Name, &session.TOTPEnabled, &session.ExpiresAt)
+	`, tokenHash).Scan(&session.ID, &session.UserID, &session.Email, &name, &session.TOTPEnabled, &session.ExpiresAt)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return domain.Session{}, domain.ErrNotFound
 		}
 		return domain.Session{}, fmt.Errorf("query session: %w", err)
 	}
+	session.Name = name.String
 	return session, nil
 }
 

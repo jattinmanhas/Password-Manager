@@ -12,6 +12,7 @@ import {
     RecoveryVerifyResponse,
     RecoveryResetRequest,
     RecoveryResetResponse,
+    RecoveryStatusResponse,
 } from "../types";
 
 import { request, ApiError } from "../../../lib/api";
@@ -42,6 +43,9 @@ export const authService = {
     },
     disableTOTP() {
         return request<void>("POST", "/auth/totp/disable");
+    },
+    getRecoveryStatus() {
+        return request<RecoveryStatusResponse>("GET", "/auth/recovery/status");
     },
     setupRecovery(req: RecoverySetupRequest) {
         return request<RecoverySetupResponse>("POST", "/auth/recovery/setup", req);

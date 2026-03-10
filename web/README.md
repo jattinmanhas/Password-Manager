@@ -47,6 +47,10 @@ npm run crypto:check
 - TOTP enable (returns recovery codes): `POST /api/v1/auth/totp/enable`
 - TOTP verify: `POST /api/v1/auth/totp/verify`
 - TOTP disable: `POST /api/v1/auth/totp/disable`
+- Recovery status: `GET /api/v1/auth/recovery/status`
+- Recovery setup: `POST /api/v1/auth/recovery/setup`
+- Recovery verify: `POST /api/v1/auth/recovery/verify`
+- Recovery reset: `POST /api/v1/auth/recovery/reset`
 
 ## Notes
 

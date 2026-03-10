@@ -24,3 +24,7 @@ export interface CreateVaultItemRequest {
 }
 
 export interface UpdateVaultItemRequest extends CreateVaultItemRequest {}
+
+export interface VaultSaltResponse {
+  salt: string;
+}

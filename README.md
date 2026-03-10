@@ -32,6 +32,16 @@ This repository contains the initial scaffold for a low-cost, self-hosted passwo
   - Login/register/session bootstrap and TOTP setup flows wired to backend auth endpoints.
   - Client-side crypto module implemented for Argon2id KDF + XChaCha20-Poly1305 with validation hardening.
 
+## Recent Progress
+
+- **Zero-Knowledge Account Recovery**:
+  - Secure recovery key generation for regaining access in case of a forgotten master password.
+  - The Master Encryption Key (KEK) is securely wrapped with the recovery key and persisted in the database.
+  - The password reset flow un-wraps the KEK and re-encrypts the vault data with the new password, ensuring zero data loss without compromising security.
+- **Vault Enhancements**:
+  - Upgraded vault Key Derivation Function (KDF) to utilize 32-byte salts for stronger security.
+  - Vault management endpoints (CRUD operations) implemented and wired.
+
 ## Quick Start
 
 1. Copy env file:

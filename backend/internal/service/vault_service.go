@@ -113,6 +113,23 @@ func (s *VaultService) DeleteItem(ctx context.Context, userID string, itemID str
 	return nil
 }
 
+func (s *VaultService) GetVaultSalt(ctx context.Context, userID string) ([]byte, error) {
+	ownerUserID := strings.TrimSpace(userID)
+	if ownerUserID == "" {
+		return nil, domain.ErrUnauthorizedSession
+	}
+
+	salt, err := s.repo.GetVaultSaltForUser(ctx, ownerUserID)
+	if err != nil {
+		if errors.Is(err, domain.ErrNotFound) {
+			return nil, domain.ErrNotFound
+		}
+		return nil, fmt.Errorf("get vault salt: %w", err)
+	}
+
+	return salt, nil
+}
+
 func validateVaultPayload(ciphertext []byte, nonce []byte, wrappedDEK []byte, wrapNonce []byte, algoVersion string, metadata []byte) error {
 	if len(ciphertext) == 0 || len(nonce) == 0 || len(wrappedDEK) == 0 || len(wrapNonce) == 0 {
 		return domain.ErrInvalidVaultPayload

@@ -116,6 +116,18 @@ func (c *VaultController) HandleDeleteItem(w http.ResponseWriter, r *http.Reques
 	util.WriteJSON(w, http.StatusOK, dto.StatusResponse{Status: "deleted"})
 }
 
+func (c *VaultController) HandleGetVaultSalt(w http.ResponseWriter, r *http.Request, session domain.Session) {
+	salt, err := c.vault.GetVaultSalt(r.Context(), session.UserID)
+	if err != nil {
+		c.writeVaultError(w, err, "failed to get vault salt")
+		return
+	}
+
+	util.WriteJSON(w, http.StatusOK, dto.VaultSaltResponse{
+		Salt: encodeBase64(salt),
+	})
+}
+
 type upsertVaultItemInput struct {
 	Ciphertext  []byte
 	Nonce       []byte

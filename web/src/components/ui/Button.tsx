@@ -3,19 +3,24 @@ import { cn } from "../../lib/utils"
 
 export interface ButtonProps
     extends React.ButtonHTMLAttributes<HTMLButtonElement> {
-    variant?: "primary" | "ghost";
+    variant?: "primary" | "ghost" | "outline";
+    size?: "default" | "sm" | "icon";
     isLoading?: boolean;
 }
 
 const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
-    ({ className, variant = "primary", isLoading, children, ...props }, ref) => {
+    ({ className, variant = "primary", size = "default", isLoading, children, ...props }, ref) => {
         return (
             <button
                 ref={ref}
                 disabled={isLoading || props.disabled}
                 className={cn(
                     "btn",
-                    variant === "primary" ? "btn-primary" : "btn-ghost",
+                    variant === "primary" && "btn-primary",
+                    variant === "ghost" && "btn-ghost",
+                    variant === "outline" && "btn-outline",
+                    size === "sm" && "px-3 py-1 text-sm h-8",
+                    size === "icon" && "p-2 h-10 w-10 flex items-center justify-center",
                     className
                 )}
                 {...props}

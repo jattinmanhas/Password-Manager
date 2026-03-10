@@ -43,4 +43,5 @@ type VaultRepository interface {
 	GetVaultItemByIDForOwner(ctx context.Context, itemID string, ownerUserID string) (VaultItem, error)
 	UpdateVaultItemForOwner(ctx context.Context, itemID string, ownerUserID string, input UpdateVaultItemInput) (VaultItem, error)
 	DeleteVaultItemForOwner(ctx context.Context, itemID string, ownerUserID string) (bool, error)
+	GetVaultSaltForUser(ctx context.Context, userID string) ([]byte, error)
 }

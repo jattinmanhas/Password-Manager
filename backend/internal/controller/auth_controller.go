@@ -218,18 +218,13 @@ func (c *AuthController) HandleRecoverySetup(w http.ResponseWriter, r *http.Requ
 		return
 	}
 
-	if strings.TrimSpace(req.RecoveryKeyHash) == "" {
-		util.WriteError(w, http.StatusBadRequest, "invalid_recovery_key", "recovery key hash is required")
-		return
-	}
-
-	hashBytes, err := decodeHex(req.RecoveryKeyHash)
-	if err != nil {
-		util.WriteError(w, http.StatusBadRequest, "invalid_recovery_key", "recovery key hash must be valid hex")
+	if strings.TrimSpace(req.RecoveryKey) == "" {
+		util.WriteError(w, http.StatusBadRequest, "invalid_recovery_key", "recovery key is required")
 		return
 	}
 
 	var wrappedKEK, wrapNonce, kekSalt []byte
+	var err error
 	if strings.TrimSpace(req.WrappedKEK) != "" {
 		wrappedKEK, err = decodeBase64Required(req.WrappedKEK)
 		if err != nil {
@@ -248,7 +243,7 @@ func (c *AuthController) HandleRecoverySetup(w http.ResponseWriter, r *http.Requ
 		}
 	}
 
-	if err := c.auth.SetupRecovery(r.Context(), session.UserID, hashBytes, wrappedKEK, wrapNonce, kekSalt); err != nil {
+	if err := c.auth.SetupRecovery(r.Context(), session.UserID, req.RecoveryKey, wrappedKEK, wrapNonce, kekSalt); err != nil {
 		switch {
 		case errors.Is(err, domain.ErrInvalidRecoveryKey):
 			util.WriteError(w, http.StatusBadRequest, "invalid_recovery_key", "invalid recovery key")
@@ -259,6 +254,15 @@ func (c *AuthController) HandleRecoverySetup(w http.ResponseWriter, r *http.Requ
 	}
 
 	util.WriteJSON(w, http.StatusOK, dto.RecoverySetupResponse{Status: "recovery_configured"})
+}
+
+func (c *AuthController) HandleGetRecoveryStatus(w http.ResponseWriter, r *http.Request, session domain.Session) {
+	status, err := c.auth.GetRecoveryStatus(r.Context(), session.UserID)
+	if err != nil {
+		util.WriteError(w, http.StatusInternalServerError, "internal_error", "failed to check recovery status")
+		return
+	}
+	util.WriteJSON(w, http.StatusOK, dto.RecoveryStatusResponse{IsEnabled: status})
 }
 
 func (c *AuthController) HandleRecoveryVerify(w http.ResponseWriter, r *http.Request) {
