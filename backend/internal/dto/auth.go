@@ -109,9 +109,14 @@ type RecoveryVerifyResponse struct {
 type RecoveryResetRequest struct {
 	RecoveryToken string `json:"recovery_token"`
 	NewPassword   string `json:"new_password"`
+	DeviceName    string `json:"device_name"`
 }
 
 type RecoveryResetResponse struct {
-	Status string `json:"status"`
-	UserID string `json:"user_id"`
+	Status      string `json:"status"`
+	UserID      string `json:"user_id"`
+	Email       string `json:"email"`
+	Name        string `json:"name"`
+	ExpiresAt   string `json:"expires_at"`
+	TOTPEnabled bool   `json:"is_totp_enabled"`
 }

@@ -1,4 +1,4 @@
-import { Eye, EyeOff, Lock } from "lucide-react";
+import { CreditCard, Eye, EyeOff, Landmark, Lock, StickyNote } from "lucide-react";
 import { useState } from "react";
 import type { VaultViewItem } from "../vault.types";
 
@@ -47,8 +47,33 @@ export function VaultItemRow({ item, onEdit, onDelete }: VaultItemRowProps) {
     );
   }
 
-  const initials = (item.secret.title || "?").slice(0, 1).toUpperCase();
-  const hue = [...(item.secret.title || "A")].reduce((acc, ch) => acc + ch.charCodeAt(0), 0) % 360;
+  const { secret } = item;
+  const kind = secret.kind || "login";
+  const initials = (secret.title || "?").slice(0, 1).toUpperCase();
+  const hue = [...(secret.title || "A")].reduce((acc, ch) => acc + ch.charCodeAt(0), 0) % 360;
+
+  let Icon = Lock;
+  let subtitle = "";
+  let sensitiveValue = "";
+
+  if (kind === "login") {
+    Icon = Lock;
+    subtitle = (secret as any).username;
+    sensitiveValue = (secret as any).password;
+  } else if (kind === "card") {
+    Icon = CreditCard;
+    const cardNum = (secret as any).cardNumber || "";
+    subtitle = (secret as any).cardholderName || "Payment Card";
+    sensitiveValue = cardNum ? `•••• ${cardNum.slice(-4)}` : "Card Details";
+  } else if (kind === "bank") {
+    Icon = Landmark;
+    subtitle = (secret as any).bankName || "Bank Account";
+    sensitiveValue = (secret as any).accountNumber ? `Acc: ••••${(secret as any).accountNumber.slice(-4)}` : "Account Details";
+  } else if (kind === "note") {
+    Icon = StickyNote;
+    subtitle = "Secure Note";
+    sensitiveValue = "Click to view notes";
+  }
 
   return (
     <div
@@ -71,15 +96,13 @@ export function VaultItemRow({ item, onEdit, onDelete }: VaultItemRowProps) {
           borderRadius: "var(--radius-xl)",
           background: `hsl(${hue}, 55%, 50%)`,
           color: "white",
-          fontSize: "0.875rem",
-          fontWeight: 700,
           display: "flex",
           alignItems: "center",
           justifyContent: "center",
           flexShrink: 0,
         }}
       >
-        {initials}
+        <Icon size={18} />
       </div>
 
       {/* Content */}
@@ -92,37 +115,66 @@ export function VaultItemRow({ item, onEdit, onDelete }: VaultItemRowProps) {
             whiteSpace: "nowrap",
             overflow: "hidden",
             textOverflow: "ellipsis",
+            margin: 0,
           }}
         >
-          {item.secret.title || "Untitled"}
+          {secret.title || "Untitled"}
         </p>
-        {item.secret.username && (
+        <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", marginTop: "0.1rem" }}>
+          {subtitle && (
+            <p
+              style={{
+                fontSize: "0.8125rem",
+                color: "var(--color-text-subtle)",
+                whiteSpace: "nowrap",
+                overflow: "hidden",
+                textOverflow: "ellipsis",
+                margin: 0,
+              }}
+            >
+              {subtitle}
+            </p>
+          )}
+          {subtitle && sensitiveValue && <span style={{ color: "var(--color-border)", fontSize: "0.75rem" }}>•</span>}
           <p
             style={{
+              fontFamily: "monospace",
               fontSize: "0.8125rem",
-              color: "var(--color-text-subtle)",
-              marginTop: "0.1rem",
-              whiteSpace: "nowrap",
-              overflow: "hidden",
-              textOverflow: "ellipsis",
+              color: "var(--color-text-main)",
+              letterSpacing: (kind === "login" && !showPassword) ? "0.08em" : "0",
+              margin: 0,
             }}
           >
-            {item.secret.username}
+            {kind === "login" 
+              ? (showPassword ? sensitiveValue : "•".repeat(Math.min(sensitiveValue.length, 12)))
+              : (sensitiveValue)
+            }
           </p>
+        </div>
+        
+        {/* Tags */}
+        {secret.tags && secret.tags.length > 0 && (
+          <div style={{ display: "flex", flexWrap: "wrap", gap: "0.25rem", marginTop: "0.375rem" }}>
+            {secret.tags.map((tag) => (
+              <span
+                key={tag}
+                style={{
+                  fontSize: "0.625rem",
+                  fontWeight: 600,
+                  textTransform: "uppercase",
+                  letterSpacing: "0.02em",
+                  padding: "0.125rem 0.5rem",
+                  borderRadius: "0.25rem",
+                  background: "var(--color-bg-light)",
+                  border: "1px solid var(--color-border)",
+                  color: "var(--color-text-subtle)",
+                }}
+              >
+                {tag}
+              </span>
+            ))}
+          </div>
         )}
-        <p
-          style={{
-            fontFamily: "monospace",
-            fontSize: "0.8125rem",
-            color: "var(--color-text-main)",
-            marginTop: "0.2rem",
-            letterSpacing: showPassword ? "0" : "0.08em",
-          }}
-        >
-          {showPassword
-            ? item.secret.password
-            : "•".repeat(Math.min(item.secret.password.length, 16))}
-        </p>
       </div>
 
       {/* Actions */}

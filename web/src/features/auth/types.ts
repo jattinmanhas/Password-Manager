@@ -86,9 +86,14 @@ export interface RecoveryVerifyResponse {
 export interface RecoveryResetRequest {
     recovery_token: string;
     new_password: string;
+    device_name?: string;
 }
 
 export interface RecoveryResetResponse {
     status: string;
     user_id: string;
+    email: string;
+    name: string;
+    expires_at: string;
+    is_totp_enabled: boolean;
 }

@@ -3,21 +3,57 @@
 export type VaultType = "personal" | "shared";
 export type VaultFilter = "all" | VaultType;
 
-export interface VaultSecret {
-  title: string;
+export type VaultSecretKind = "login" | "card" | "bank" | "note";
+
+export interface LoginFields {
   username: string;
   password: string;
-  notes: string;
 }
+
+export interface CardFields {
+  cardholderName: string;
+  cardNumber: string;
+  expiryDate: string;
+  cvv: string;
+  cardType: "visa" | "mastercard" | "amex" | "other";
+}
+
+export interface BankFields {
+  bankName: string;
+  accountNumber: string;
+  routingNumber: string;
+  accountType: "checking" | "savings" | "other";
+}
+
+export interface BaseSecret {
+  kind: VaultSecretKind;
+  title: string;
+  notes: string;
+  tags?: string[];
+}
+
+export type LoginSecret = BaseSecret & { kind: "login" } & LoginFields;
+export type CardSecret = BaseSecret & { kind: "card" } & CardFields;
+export type BankSecret = BaseSecret & { kind: "bank" } & BankFields;
+export type NoteSecret = BaseSecret & { kind: "note" };
+
+export type VaultSecret = LoginSecret | CardSecret | BankSecret | NoteSecret;
 
 export interface VaultViewItem {
   id: string;
+  folderId?: string;
   updatedAt: string;
   secret: VaultSecret | null;
   isCorrupted: boolean;
   vaultId: string;
   vaultName: string;
   vaultType: VaultType;
+}
+
+export interface VaultFolder {
+  id: string;
+  name: string;
+  updatedAt: string;
 }
 
 export interface VaultDirectoryEntry {
@@ -34,7 +70,7 @@ export interface VaultCardModel extends VaultDirectoryEntry {
 }
 
 export interface VaultMetadata {
-  kind?: string;
+  kind?: VaultSecretKind | string;
   vault_id?: string;
   vault_name?: string;
   vault_type?: VaultType;
@@ -42,6 +78,7 @@ export interface VaultMetadata {
 }
 
 export const DEFAULT_SECRET: VaultSecret = {
+  kind: "login",
   title: "",
   username: "",
   password: "",

@@ -3,6 +3,7 @@ package dto
 import "encoding/json"
 
 type CreateVaultItemRequest struct {
+	FolderID    *string         `json:"folder_id"`
 	Ciphertext  string          `json:"ciphertext"`
 	Nonce       string          `json:"nonce"`
 	WrappedDEK  string          `json:"wrapped_dek"`
@@ -12,6 +13,7 @@ type CreateVaultItemRequest struct {
 }
 
 type UpdateVaultItemRequest struct {
+	FolderID    *string         `json:"folder_id"`
 	Ciphertext  string          `json:"ciphertext"`
 	Nonce       string          `json:"nonce"`
 	WrappedDEK  string          `json:"wrapped_dek"`
@@ -22,6 +24,7 @@ type UpdateVaultItemRequest struct {
 
 type VaultItemResponse struct {
 	ID          string          `json:"id"`
+	FolderID    *string         `json:"folder_id,omitempty"`
 	Ciphertext  string          `json:"ciphertext"`
 	Nonce       string          `json:"nonce"`
 	WrappedDEK  string          `json:"wrapped_dek"`
@@ -34,6 +37,23 @@ type VaultItemResponse struct {
 
 type VaultItemsResponse struct {
 	Items []VaultItemResponse `json:"items"`
+}
+
+type CreateFolderRequest struct {
+	NameCiphertext string `json:"name_ciphertext"`
+	Nonce          string `json:"nonce"`
+}
+
+type FolderResponse struct {
+	ID             string `json:"id"`
+	NameCiphertext string `json:"name_ciphertext"`
+	Nonce          string `json:"nonce"`
+	CreatedAt      string `json:"created_at"`
+	UpdatedAt      string `json:"updated_at"`
+}
+
+type FoldersResponse struct {
+	Folders []FolderResponse `json:"folders"`
 }
 
 type VaultSaltResponse struct {

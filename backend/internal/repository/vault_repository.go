@@ -28,13 +28,14 @@ func (r *VaultRepository) CreateVaultItem(ctx context.Context, input domain.Crea
 	var metadata []byte
 	err = r.db.QueryRowContext(ctx, `
 		INSERT INTO vault_items (
-			id, owner_user_id, ciphertext, nonce, dek_wrapped, wrap_nonce, algo_version, metadata, created_at, updated_at
+			id, owner_user_id, folder_id, ciphertext, nonce, dek_wrapped, wrap_nonce, algo_version, metadata, created_at, updated_at
 		)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, NOW(), NOW())
-		RETURNING id, owner_user_id, ciphertext, nonce, dek_wrapped, wrap_nonce, algo_version, metadata, created_at, updated_at
-	`, itemID, input.OwnerUserID, input.Ciphertext, input.Nonce, input.WrappedDEK, input.WrapNonce, input.AlgoVersion, nullableJSON(input.Metadata)).Scan(
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, NOW(), NOW())
+		RETURNING id, owner_user_id, folder_id, ciphertext, nonce, dek_wrapped, wrap_nonce, algo_version, metadata, created_at, updated_at
+	`, itemID, input.OwnerUserID, input.FolderID, input.Ciphertext, input.Nonce, input.WrappedDEK, input.WrapNonce, input.AlgoVersion, nullableJSON(input.Metadata)).Scan(
 		&item.ID,
 		&item.OwnerUserID,
+		&item.FolderID,
 		&item.Ciphertext,
 		&item.Nonce,
 		&item.WrappedDEK,
@@ -54,7 +55,7 @@ func (r *VaultRepository) CreateVaultItem(ctx context.Context, input domain.Crea
 
 func (r *VaultRepository) ListVaultItemsByOwner(ctx context.Context, ownerUserID string) ([]domain.VaultItem, error) {
 	rows, err := r.db.QueryContext(ctx, `
-		SELECT id, owner_user_id, ciphertext, nonce, dek_wrapped, wrap_nonce, algo_version, metadata, created_at, updated_at
+		SELECT id, owner_user_id, folder_id, ciphertext, nonce, dek_wrapped, wrap_nonce, algo_version, metadata, created_at, updated_at
 		FROM vault_items
 		WHERE owner_user_id = $1
 		ORDER BY updated_at DESC
@@ -71,6 +72,7 @@ func (r *VaultRepository) ListVaultItemsByOwner(ctx context.Context, ownerUserID
 		if err := rows.Scan(
 			&item.ID,
 			&item.OwnerUserID,
+			&item.FolderID,
 			&item.Ciphertext,
 			&item.Nonce,
 			&item.WrappedDEK,
@@ -97,12 +99,13 @@ func (r *VaultRepository) GetVaultItemByIDForOwner(ctx context.Context, itemID s
 	var item domain.VaultItem
 	var metadata []byte
 	err := r.db.QueryRowContext(ctx, `
-		SELECT id, owner_user_id, ciphertext, nonce, dek_wrapped, wrap_nonce, algo_version, metadata, created_at, updated_at
+		SELECT id, owner_user_id, folder_id, ciphertext, nonce, dek_wrapped, wrap_nonce, algo_version, metadata, created_at, updated_at
 		FROM vault_items
 		WHERE id = $1 AND owner_user_id = $2
 	`, itemID, ownerUserID).Scan(
 		&item.ID,
 		&item.OwnerUserID,
+		&item.FolderID,
 		&item.Ciphertext,
 		&item.Nonce,
 		&item.WrappedDEK,
@@ -128,18 +131,20 @@ func (r *VaultRepository) UpdateVaultItemForOwner(ctx context.Context, itemID st
 	err := r.db.QueryRowContext(ctx, `
 		UPDATE vault_items
 		SET
-			ciphertext = $3,
-			nonce = $4,
-			dek_wrapped = $5,
-			wrap_nonce = $6,
-			algo_version = $7,
-			metadata = $8,
+			folder_id = $3,
+			ciphertext = $4,
+			nonce = $5,
+			dek_wrapped = $6,
+			wrap_nonce = $7,
+			algo_version = $8,
+			metadata = $9,
 			updated_at = NOW()
 		WHERE id = $1 AND owner_user_id = $2
-		RETURNING id, owner_user_id, ciphertext, nonce, dek_wrapped, wrap_nonce, algo_version, metadata, created_at, updated_at
-	`, itemID, ownerUserID, input.Ciphertext, input.Nonce, input.WrappedDEK, input.WrapNonce, input.AlgoVersion, nullableJSON(input.Metadata)).Scan(
+		RETURNING id, owner_user_id, folder_id, ciphertext, nonce, dek_wrapped, wrap_nonce, algo_version, metadata, created_at, updated_at
+	`, itemID, ownerUserID, input.FolderID, input.Ciphertext, input.Nonce, input.WrappedDEK, input.WrapNonce, input.AlgoVersion, nullableJSON(input.Metadata)).Scan(
 		&item.ID,
 		&item.OwnerUserID,
+		&item.FolderID,
 		&item.Ciphertext,
 		&item.Nonce,
 		&item.WrappedDEK,

@@ -6,13 +6,16 @@ import { Toaster } from "react-hot-toast";
 import "./styles/index.css";
 
 import { DialogProvider } from "./app/providers/DialogProvider";
+import { VaultProvider } from "./app/providers/VaultProvider";
 
 createRoot(document.getElementById("root")!).render(
   <StrictMode>
     <DialogProvider>
       <AuthProvider>
-        <Toaster position="top-center" />
-        <AppRouter />
+        <VaultProvider>
+          <Toaster position="top-center" />
+          <AppRouter />
+        </VaultProvider>
       </AuthProvider>
     </DialogProvider>
   </StrictMode>

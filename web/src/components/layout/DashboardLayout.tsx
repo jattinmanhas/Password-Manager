@@ -2,7 +2,8 @@ import { useState, useEffect } from "react";
 import { Outlet, Link, useLocation } from "react-router-dom";
 import { 
     LayoutDashboard, Key, Users, ShieldCheck, Activity, Settings, 
-    LogOut, Menu, X, ChevronLeft, ChevronRight, User as UserIcon
+    LogOut, Menu, X, ChevronLeft, ChevronRight, User as UserIcon,
+    Dices
 } from "lucide-react";
 import { useAuth } from "../../app/providers/AuthProvider";
 
@@ -21,6 +22,7 @@ export function DashboardLayout() {
     const mainNav = [
         { name: "Dashboard", path: "/dashboard", icon: LayoutDashboard },
         { name: "Vault", path: "/vault", icon: Key },
+        { name: "Generator", path: "/generator", icon: Dices },
         { name: "Shared Vaults", path: "/shared", icon: Users },
         { name: "Activity", path: "/activity", icon: Activity },
     ];

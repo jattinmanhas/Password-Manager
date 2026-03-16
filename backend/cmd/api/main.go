@@ -32,8 +32,11 @@ func main() {
 
 	authRepository := repository.NewAuthRepository(postgres.SQL())
 	vaultRepository := repository.NewVaultRepository(postgres.SQL())
+	folderRepository := repository.NewPostgresFolderRepository(postgres.SQL())
+
 	authService := service.NewAuthService(authRepository, cfg.AuthPepper, cfg.SessionTTL, cfg.TOTPIssuer)
 	vaultService := service.NewVaultService(vaultRepository)
+	folderService := service.NewFolderService(folderRepository)
 
 	go func() {
 		ticker := time.NewTicker(1 * time.Hour)
@@ -50,7 +53,7 @@ func main() {
 
 	httpServer := &http.Server{
 		Addr:         ":" + cfg.Port,
-		Handler:      router.NewRouter(cfg, authService, vaultService),
+		Handler:      router.NewRouter(cfg, authService, vaultService, folderService),
 		ReadTimeout:  cfg.ReadTimeout,
 		WriteTimeout: cfg.WriteTimeout,
 		IdleTimeout:  cfg.IdleTimeout,

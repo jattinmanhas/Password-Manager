@@ -4,32 +4,42 @@ import { X } from "lucide-react";
 import { Label } from "../../../components/ui/Label";
 import { Input } from "../../../components/ui/Input";
 import { Button } from "../../../components/ui/Button";
-import type { VaultSecret } from "../vault.types";
+import { Select } from "../../../components/ui/Select";
+import { MultiSelect } from "../../../components/ui/MultiSelect";
+import type { VaultFolder, VaultSecret } from "../vault.types";
 import { PasswordGenerator } from "./PasswordGenerator";
-import { useState } from "react";
+import { useState, useMemo } from "react";
 
 interface VaultItemFormProps {
   vaultName: string;
+  folders: VaultFolder[];
+  selectedFolderId: string | undefined;
   draft: VaultSecret;
   saving: boolean;
   isEditing: boolean;
   error: string;
   corruptedCount: number;
   onDraftChange: (draft: VaultSecret) => void;
+  onFolderChange: (folderId: string | undefined) => void;
   onSubmit: (e: FormEvent) => void;
   onClose: () => void;
+  allTags: string[];
 }
 
 export function VaultItemForm({
   vaultName,
+  folders,
+  selectedFolderId,
   draft,
   saving,
   isEditing,
   error,
   corruptedCount,
   onDraftChange,
+  onFolderChange,
   onSubmit,
   onClose,
+  allTags,
 }: VaultItemFormProps) {
   const [showGenerator, setShowGenerator] = useState(false);
 
@@ -87,62 +97,225 @@ export function VaultItemForm({
       <form className="form-stack" onSubmit={onSubmit}>
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "1rem" }}>
           <div className="form-group">
-            <Label htmlFor="item-title">Title</Label>
-            <Input
-              id="item-title"
-              type="text"
-              placeholder="e.g. GitHub"
-              value={draft.title}
-              onChange={(e) => onDraftChange({ ...draft, title: e.target.value })}
+            <Label>Item Type</Label>
+            <Select
+              options={[
+                { value: "login", label: "Login" },
+                { value: "card", label: "Payment Card" },
+                { value: "bank", label: "Bank Account" },
+                { value: "note", label: "Secure Note" },
+              ]}
+              value={draft.kind}
+              onChange={(value) => {
+                const newKind = value as any;
+                const base = { title: draft.title, notes: draft.notes, tags: draft.tags, kind: newKind };
+                if (newKind === "login") {
+                  onDraftChange({ ...base, username: "", password: "" });
+                } else if (newKind === "card") {
+                  onDraftChange({ ...base, cardholderName: "", cardNumber: "", expiryDate: "", cvv: "", cardType: "other" });
+                } else if (newKind === "bank") {
+                  onDraftChange({ ...base, bankName: "", accountNumber: "", routingNumber: "", accountType: "other" });
+                } else {
+                  onDraftChange({ ...base });
+                }
+              }}
               disabled={saving}
-              required
             />
           </div>
+
           <div className="form-group">
-            <Label htmlFor="item-username">Username / Email</Label>
-            <Input
-              id="item-username"
-              type="text"
-              placeholder="e.g. user@email.com"
-              value={draft.username}
-              onChange={(e) => onDraftChange({ ...draft, username: e.target.value })}
+            <Label>Folder (Vault)</Label>
+            <Select
+              placeholder="No Folder"
+              options={[
+                { value: "", label: "No Folder" },
+                ...folders.map((f) => ({ value: f.id, label: f.name })),
+              ]}
+              value={selectedFolderId || ""}
+              onChange={(value) => onFolderChange(value || undefined)}
               disabled={saving}
             />
           </div>
         </div>
 
         <div className="form-group">
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-            <Label htmlFor="item-password">Password</Label>
-            <Button
-              type="button"
-              variant="ghost"
-              size="sm"
-              onClick={() => setShowGenerator(!showGenerator)}
-              style={{ padding: "0.25rem 0.5rem", height: "auto", fontSize: "0.875rem" }}
-            >
-              {showGenerator ? "Hide Generator" : "Generate"}
-            </Button>
-          </div>
+          <Label>Tags</Label>
+          <MultiSelect
+            placeholder="Search or add tags..."
+            options={allTags}
+            value={draft.tags || []}
+            onChange={(tags) => onDraftChange({ ...draft, tags })}
+            disabled={saving}
+          />
+        </div>
+
+        <div className="form-group">
+          <Label htmlFor="item-title">Title</Label>
           <Input
-            id="item-password"
+            id="item-title"
             type="text"
-            placeholder="Enter password"
-            value={draft.password}
-            onChange={(e) => onDraftChange({ ...draft, password: e.target.value })}
+            placeholder="e.g. GitHub or Chase Card"
+            value={draft.title}
+            onChange={(e) => onDraftChange({ ...draft, title: e.target.value })}
             disabled={saving}
             required
           />
-          {showGenerator && (
-            <PasswordGenerator
-              onUsePassword={(password) => {
-                onDraftChange({ ...draft, password });
-                setShowGenerator(false);
-              }}
-              onCancel={() => setShowGenerator(false)}
-            />
-          )}
         </div>
+
+        {/* Conditional Fields based on Kind */}
+        {draft.kind === "login" && (
+          <>
+            <div className="form-group">
+              <Label htmlFor="item-username">Username / Email</Label>
+              <Input
+                id="item-username"
+                type="text"
+                placeholder="e.g. user@email.com"
+                value={(draft as any).username || ""}
+                onChange={(e) => onDraftChange({ ...draft, username: e.target.value } as any)}
+                disabled={saving}
+              />
+            </div>
+            <div className="form-group">
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                <Label htmlFor="item-password">Password</Label>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => setShowGenerator(!showGenerator)}
+                  style={{ padding: "0.25rem 0.5rem", height: "auto", fontSize: "0.875rem" }}
+                >
+                  {showGenerator ? "Hide Generator" : "Generate"}
+                </Button>
+              </div>
+              <Input
+                id="item-password"
+                type="text"
+                placeholder="Enter password"
+                value={(draft as any).password || ""}
+                onChange={(e) => onDraftChange({ ...draft, password: e.target.value } as any)}
+                disabled={saving}
+                required
+              />
+              {showGenerator && (
+                <PasswordGenerator
+                  onUsePassword={(password) => {
+                    onDraftChange({ ...draft, password } as any);
+                    setShowGenerator(false);
+                  }}
+                  onCancel={() => setShowGenerator(false)}
+                />
+              )}
+            </div>
+          </>
+        )}
+
+        {draft.kind === "card" && (
+          <>
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "1rem" }}>
+              <div className="form-group">
+                <Label htmlFor="card-number">Card Number</Label>
+                <Input
+                  id="card-number"
+                  type="text"
+                  placeholder="0000 0000 0000 0000"
+                  value={(draft as any).cardNumber || ""}
+                  onChange={(e) => onDraftChange({ ...draft, cardNumber: e.target.value } as any)}
+                  disabled={saving}
+                />
+              </div>
+              <div className="form-group">
+                <Label htmlFor="card-type">Card Type</Label>
+                <select
+                  id="card-type"
+                  className="input"
+                  value={(draft as any).cardType || "other"}
+                  onChange={(e) => onDraftChange({ ...draft, cardType: e.target.value } as any)}
+                  disabled={saving}
+                >
+                  <option value="visa">Visa</option>
+                  <option value="mastercard">Mastercard</option>
+                  <option value="amex">Amex</option>
+                  <option value="other">Other</option>
+                </select>
+              </div>
+            </div>
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1.5fr 1fr", gap: "1rem" }}>
+              <div className="form-group">
+                <Label htmlFor="card-expiry">Expiry</Label>
+                <Input
+                  id="card-expiry"
+                  type="text"
+                  placeholder="MM/YY"
+                  value={(draft as any).expiryDate || ""}
+                  onChange={(e) => onDraftChange({ ...draft, expiryDate: e.target.value } as any)}
+                  disabled={saving}
+                />
+              </div>
+              <div className="form-group">
+                <Label htmlFor="card-holder">Cardholder Name</Label>
+                <Input
+                  id="card-holder"
+                  type="text"
+                  placeholder="John Doe"
+                  value={(draft as any).cardholderName || ""}
+                  onChange={(e) => onDraftChange({ ...draft, cardholderName: e.target.value } as any)}
+                  disabled={saving}
+                />
+              </div>
+              <div className="form-group">
+                <Label htmlFor="card-cvv">CVV</Label>
+                <Input
+                  id="card-cvv"
+                  type="password"
+                  placeholder="123"
+                  value={(draft as any).cvv || ""}
+                  onChange={(e) => onDraftChange({ ...draft, cvv: e.target.value } as any)}
+                  disabled={saving}
+                />
+              </div>
+            </div>
+          </>
+        )}
+
+        {draft.kind === "bank" && (
+          <>
+            <div className="form-group">
+              <Label htmlFor="bank-name">Bank Name</Label>
+              <Input
+                id="bank-name"
+                type="text"
+                placeholder="e.g. Chase"
+                value={(draft as any).bankName || ""}
+                onChange={(e) => onDraftChange({ ...draft, bankName: e.target.value } as any)}
+                disabled={saving}
+              />
+            </div>
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "1rem" }}>
+              <div className="form-group">
+                <Label htmlFor="bank-acc">Account Number</Label>
+                <Input
+                  id="bank-acc"
+                  type="text"
+                  value={(draft as any).accountNumber || ""}
+                  onChange={(e) => onDraftChange({ ...draft, accountNumber: e.target.value } as any)}
+                  disabled={saving}
+                />
+              </div>
+              <div className="form-group">
+                <Label htmlFor="bank-routing">Routing Number</Label>
+                <Input
+                  id="bank-routing"
+                  type="text"
+                  value={(draft as any).routingNumber || ""}
+                  onChange={(e) => onDraftChange({ ...draft, routingNumber: e.target.value } as any)}
+                  disabled={saving}
+                />
+              </div>
+            </div>
+          </>
+        )}
 
         <div className="form-group">
           <Label htmlFor="item-notes">Notes</Label>

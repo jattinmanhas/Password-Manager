@@ -318,7 +318,14 @@ func (c *AuthController) HandleRecoveryReset(w http.ResponseWriter, r *http.Requ
 		return
 	}
 
-	userID, err := c.auth.ResetPassword(r.Context(), req.RecoveryToken, req.NewPassword)
+	output, err := c.auth.ResetPassword(
+		r.Context(),
+		req.RecoveryToken,
+		req.NewPassword,
+		req.DeviceName,
+		util.ClientIPFromRequest(r),
+		r.UserAgent(),
+	)
 	if err != nil {
 		switch {
 		case errors.Is(err, domain.ErrInvalidRecoveryToken):
@@ -331,9 +338,15 @@ func (c *AuthController) HandleRecoveryReset(w http.ResponseWriter, r *http.Requ
 		return
 	}
 
+	c.setSessionCookie(w, output.SessionToken, output.ExpiresAt)
+
 	util.WriteJSON(w, http.StatusOK, dto.RecoveryResetResponse{
-		Status: "password_reset",
-		UserID: userID,
+		Status:      "password_reset",
+		UserID:      output.UserID,
+		Email:       output.Email,
+		Name:        output.Name,
+		ExpiresAt:   output.ExpiresAt.UTC().Format(time.RFC3339),
+		TOTPEnabled: output.TOTPEnabled,
 	})
 }
 

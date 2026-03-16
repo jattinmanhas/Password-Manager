@@ -60,12 +60,13 @@ func (g routeGroup) Handle(method string, path string, handler http.HandlerFunc,
 	g.mux.HandleFunc(pattern, handler)
 }
 
-func NewRouter(cfg config.Config, authService *service.AuthService, vaultService *service.VaultService) http.Handler {
+func NewRouter(cfg config.Config, authService *service.AuthService, vaultService *service.VaultService, folderService *service.FolderService) http.Handler {
 	authController := controller.NewAuthController(authService, controller.AuthCookieConfig{
 		Name:   cfg.SessionCookieName,
 		Secure: isProductionEnv(cfg.Env),
 	})
 	vaultController := controller.NewVaultController(vaultService)
+	folderController := controller.NewFolderController(folderService)
 	authMiddleware := middlewares.NewAuthMiddleware(authService, cfg.SessionCookieName)
 	mux := http.NewServeMux()
 
@@ -74,6 +75,7 @@ func NewRouter(cfg config.Config, authService *service.AuthService, vaultService
 	v1 := root.Group("/api/v1")
 	auth := v1.Group("/auth")
 	vault := v1.Group("/vault")
+	folders := v1.Group("/folders")
 
 	// Health check
 	root.Handle(http.MethodGet, "/healthz", func(w http.ResponseWriter, r *http.Request) {
@@ -104,6 +106,12 @@ func NewRouter(cfg config.Config, authService *service.AuthService, vaultService
 	// Recovery setup
 	auth.Handle(http.MethodGet, "/recovery/status", authMiddleware.WithSession(authController.HandleGetRecoveryStatus))
 	auth.Handle(http.MethodPost, "/recovery/setup", authMiddleware.WithSession(authController.HandleRecoverySetup))
+
+	// Folder routes
+	folders.Handle(http.MethodPost, "", authMiddleware.WithSession(folderController.HandleCreateFolder))
+	folders.Handle(http.MethodGet, "", authMiddleware.WithSession(folderController.HandleListFolders))
+	folders.Handle(http.MethodPut, "/{folder_id}", authMiddleware.WithSession(folderController.HandleUpdateFolder))
+	folders.Handle(http.MethodDelete, "/{folder_id}", authMiddleware.WithSession(folderController.HandleDeleteFolder))
 
 	// Vault routes
 	vault.Handle(http.MethodGet, "/salt", authMiddleware.WithSession(vaultController.HandleGetVaultSalt))

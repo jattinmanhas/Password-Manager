@@ -8,6 +8,7 @@ import { RecoverySetup } from "../../features/auth/pages/RecoverySetup";
 import { AccountRecovery } from "../../features/auth/pages/AccountRecovery";
 import { Dashboard } from "../../features/dashboard/pages/Dashboard";
 import { Vault } from "../../features/vault/pages/Vault";
+import { PasswordGeneratorPage } from "../../features/vault/pages/PasswordGeneratorPage";
 import { useAuth } from "../providers/AuthProvider";
 import { NotFound } from "../../features/shared/pages/NotFound";
 import { ErrorBoundary } from "../../features/shared/pages/ErrorBoundary";
@@ -48,6 +49,10 @@ const router = createBrowserRouter([
                     {
                         path: "/vault",
                         element: <Vault />
+                    },
+                    {
+                        path: "/generator",
+                        element: <PasswordGeneratorPage />
                     },
                     {
                         path: "/shared",

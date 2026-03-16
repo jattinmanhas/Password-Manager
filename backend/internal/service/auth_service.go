@@ -477,32 +477,32 @@ func (s *AuthService) VerifyRecoveryKey(ctx context.Context, email string, recov
 	return recoveryToken, expiresAt, &recoveryRecord, nil
 }
 
-func (s *AuthService) ResetPassword(ctx context.Context, recoveryToken string, newPassword string) (string, error) {
+func (s *AuthService) ResetPassword(ctx context.Context, recoveryToken string, newPassword string, deviceName string, ipAddr string, userAgent string) (domain.LoginOutput, error) {
 	if util.TrimOrEmpty(recoveryToken) == "" {
-		return "", domain.ErrInvalidRecoveryToken
+		return domain.LoginOutput{}, domain.ErrInvalidRecoveryToken
 	}
 
 	session, err := s.repo.GetActiveSessionByTokenHash(ctx, util.HashToken(recoveryToken, s.pepper))
 	if err != nil {
 		if errors.Is(err, domain.ErrNotFound) {
-			return "", domain.ErrInvalidRecoveryToken
+			return domain.LoginOutput{}, domain.ErrInvalidRecoveryToken
 		}
-		return "", fmt.Errorf("validate recovery token: %w", err)
+		return domain.LoginOutput{}, fmt.Errorf("validate recovery token: %w", err)
 	}
 
 	if err := util.ValidatePasswordStrength(newPassword); err != nil {
-		return "", err
+		return domain.LoginOutput{}, err
 	}
 
 	params := util.DefaultArgon2Params()
 	paramsJSON, err := util.MarshalArgon2Params(params)
 	if err != nil {
-		return "", fmt.Errorf("marshal argon2 params: %w", err)
+		return domain.LoginOutput{}, fmt.Errorf("marshal argon2 params: %w", err)
 	}
 
 	salt, passwordHash, err := util.HashPassword(newPassword, params)
 	if err != nil {
-		return "", err
+		return domain.LoginOutput{}, err
 	}
 
 	err = s.repo.UpdatePassword(ctx, domain.ResetPasswordInput{
@@ -513,16 +513,54 @@ func (s *AuthService) ResetPassword(ctx context.Context, recoveryToken string, n
 		PasswordHash: passwordHash,
 	})
 	if err != nil {
-		return "", fmt.Errorf("update password: %w", err)
+		return domain.LoginOutput{}, fmt.Errorf("update password: %w", err)
 	}
 
 	if _, err := s.repo.RevokeAllUserSessions(ctx, session.UserID); err != nil {
-		return "", fmt.Errorf("revoke sessions after recovery: %w", err)
+		return domain.LoginOutput{}, fmt.Errorf("revoke sessions after recovery: %w", err)
 	}
 
 	if err := s.repo.UpdateLastRecoveryAt(ctx, session.UserID); err != nil {
-		return "", fmt.Errorf("update last recovery timestamp: %w", err)
+		return domain.LoginOutput{}, fmt.Errorf("update last recovery timestamp: %w", err)
 	}
 
-	return session.UserID, nil
+	// Fetch full user record to populate session details
+	record, err := s.repo.GetUserAuthByEmail(ctx, session.Email)
+	if err != nil {
+		return domain.LoginOutput{}, fmt.Errorf("read auth record for reset session: %w", err)
+	}
+
+	// Create a new session so the user remains logged in immediately
+	sessionToken, err := util.NewOpaqueToken(32)
+	if err != nil {
+		return domain.LoginOutput{}, err
+	}
+
+	newSessionID, err := util.NewUUID()
+	if err != nil {
+		return domain.LoginOutput{}, err
+	}
+
+	expiresAt := s.now().UTC().Add(s.sessionTTL)
+	err = s.repo.CreateSession(ctx, domain.CreateSessionInput{
+		SessionID:  newSessionID,
+		UserID:     record.UserID,
+		TokenHash:  util.HashToken(sessionToken, s.pepper),
+		DeviceName: util.TrimOrEmpty(deviceName),
+		IPAddr:     util.NormalizeIP(ipAddr),
+		UserAgent:  util.TrimOrEmpty(userAgent),
+		ExpiresAt:  expiresAt,
+	})
+	if err != nil {
+		return domain.LoginOutput{}, fmt.Errorf("create session after reset: %w", err)
+	}
+
+	return domain.LoginOutput{
+		SessionToken: sessionToken,
+		ExpiresAt:    expiresAt,
+		UserID:       record.UserID,
+		Email:        record.Email,
+		Name:         record.Name,
+		TOTPEnabled:  record.TOTPEnabled,
+	}, nil
 }

@@ -3,6 +3,7 @@ import { Link, useNavigate } from "react-router-dom";
 import { Eye, EyeOff, KeyRound } from "lucide-react";
 import toast from "react-hot-toast";
 
+import { useAuth } from "../../../app/providers/AuthProvider";
 import { Card } from "../../../components/ui/Card";
 import { Button } from "../../../components/ui/Button";
 import { Input } from "../../../components/ui/Input";
@@ -40,6 +41,7 @@ function parseVaultMetadata(metadata: unknown): Record<string, unknown> {
 
 export function AccountRecovery() {
     const navigate = useNavigate();
+    const { setSessionRaw } = useAuth();
 
     const [step, setStep] = useState<Step>("verify");
     const [email, setEmail] = useState("");
@@ -99,9 +101,18 @@ export function AccountRecovery() {
 
         setLoading(true);
         try {
-            await authService.resetPassword({
+            const res = await authService.resetPassword({
                 recovery_token: recoveryToken,
                 new_password: newPassword,
+            });
+
+            // Update local session so vault re-encryption is authenticated
+            setSessionRaw({
+                userId: res.user_id,
+                expiresAt: res.expires_at,
+                email: res.email,
+                name: res.name,
+                isTotpEnabled: res.is_totp_enabled,
             });
 
             // If we have a wrapped KEK from the server, unwrap it with the recovery key

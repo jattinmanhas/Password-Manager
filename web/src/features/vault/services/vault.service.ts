@@ -1,6 +1,9 @@
 import { request } from "../../../lib/api";
 import {
+  CreateFolderRequest,
   CreateVaultItemRequest,
+  FolderResponse,
+  FoldersResponse,
   UpdateVaultItemRequest,
   VaultItemResponse,
   VaultItemsResponse,
@@ -25,5 +28,19 @@ export const vaultService = {
   },
   getVaultSalt() {
     return request<VaultSaltResponse>("GET", "/vault/salt");
+  },
+
+  // Folders
+  listFolders() {
+    return request<FoldersResponse>("GET", "/folders");
+  },
+  createFolder(req: CreateFolderRequest) {
+    return request<FolderResponse>("POST", "/folders", req);
+  },
+  updateFolder(folderId: string, req: CreateFolderRequest) {
+    return request<FolderResponse>("PUT", `/folders/${folderId}`, req);
+  },
+  deleteFolder(folderId: string) {
+    return request<{ status: string }>("DELETE", `/folders/${folderId}`);
   },
 };

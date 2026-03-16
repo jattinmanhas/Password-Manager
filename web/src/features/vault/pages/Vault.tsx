@@ -11,10 +11,10 @@ import {
   fromBase64,
   toBase64,
 } from "../../../crypto";
-import { createDefaultArgon2idKdf, createDefaultXChaCha20Poly1305 } from "../../../crypto/adapters";
+import { createDefaultArgon2idKdf } from "../../../crypto/adapters";
 import type { XChaCha20Poly1305Aead } from "../../../crypto";
 import { vaultService } from "../services/vault.service";
-import type { VaultItemResponse } from "../types";
+import type { FolderResponse, FoldersResponse, VaultItemResponse } from "../types";
 
 import {
   DEFAULT_PERSONAL_VAULT_ID,
@@ -23,6 +23,7 @@ import {
   type VaultCardModel,
   type VaultDirectoryEntry,
   type VaultFilter,
+  type VaultFolder,
   type VaultSecret,
   type VaultType,
   type VaultViewItem,
@@ -36,17 +37,22 @@ import {
   KEK_VERIFIER_KIND,
   KEK_VERIFIER_TOKEN,
   KEK_VERIFIER_TOKEN_BYTES,
-  MASTER_KEY_SALT_LENGTH,
   normalizeMemberList,
   normalizeSecret,
   wipeKeyMaterial,
 } from "../vault.utils";
 
+import { useVaultSession } from "../../../app/providers/VaultProvider";
+
 import { VaultUnlockScreen } from "../components/VaultUnlockScreen";
-import { VaultGrid } from "../components/VaultGrid";
+import { VaultSidebar } from "../components/VaultSidebar";
 import { VaultItemForm } from "../components/VaultItemForm";
 import { VaultItemsList } from "../components/VaultItemsList";
 import { VaultModal } from "../components/VaultModal";
+import { Search, Plus, SlidersHorizontal } from "lucide-react";
+import { Input } from "../../../components/ui/Input";
+import { Button } from "../../../components/ui/Button";
+import { Select } from "../../../components/ui/Select";
 
 type VaultFormData = { name: string; type: VaultType; members: string };
 
@@ -54,26 +60,37 @@ export function Vault() {
   const { session } = useAuth();
   const dialog = useDialog();
 
-  // ── Crypto state ───────────────────────────────────────────────────────────
-  const [aead, setAead] = useState<XChaCha20Poly1305Aead | null>(null);
-  const [kek, setKek] = useState<Uint8Array | null>(null);
-  const [isKekVerified, setIsKekVerified] = useState(false);
-  const [verifierItem, setVerifierItem] = useState<VaultItemResponse | null>(null);
+  // ── Crypto & Session State from Context ────────────────────────────────────
+  const {
+    aead,
+    kek,
+    isKekVerified,
+    verifierItem,
+    items,
+    setVaultSession,
+    setItems,
+    lockVault: contextLockVault,
+  } = useVaultSession();
 
   // ── Unlock form ────────────────────────────────────────────────────────────
   const [masterPassword, setMasterPassword] = useState("");
   const [unlocking, setUnlocking] = useState(false);
 
-  // ── Items ──────────────────────────────────────────────────────────────────
-  const [items, setItems] = useState<VaultViewItem[]>([]);
+  // ── Items UI State ─────────────────────────────────────────────────────────
   const [loadingItems, setLoadingItems] = useState(false);
   const [error, setError] = useState("");
+
+  // ── Folder & Tag State ─────────────────────────────────────────────────────
+  const [folders, setFolders] = useState<VaultFolder[]>([]);
+  const [selectedFolderId, setSelectedFolderId] = useState<string | undefined>();
+  const [tagFilter, setTagFilter] = useState<string[]>([]);
 
   // ── Item form ──────────────────────────────────────────────────────────────
   const [draft, setDraft] = useState<VaultSecret>(DEFAULT_SECRET);
   const [saving, setSaving] = useState(false);
   const [editingItemId, setEditingItemId] = useState<string | null>(null);
   const [showItemModal, setShowItemModal] = useState(false);
+  const [itemFolderId, setItemFolderId] = useState<string | undefined>();
 
   // ── Vault directory ────────────────────────────────────────────────────────
   const [vaultFilter, setVaultFilter] = useState<VaultFilter>("all");
@@ -90,17 +107,15 @@ export function Vault() {
   // ── Helpers ────────────────────────────────────────────────────────────────
 
   const lockVault = useCallback((clearError = true) => {
-    setKek((prev) => {
-      wipeKeyMaterial(prev);
-      return null;
-    });
-    setIsKekVerified(false);
-    setVerifierItem(null);
-    setItems([]);
+    contextLockVault();
     setEditingItemId(null);
     setDraft(DEFAULT_SECRET);
+    setItemFolderId(undefined);
+    setFolders([]);
+    setSelectedFolderId(undefined);
+    setTagFilter([]);
     if (clearError) setError("");
-  }, []);
+  }, [contextLockVault]);
 
   const decryptItem = useCallback(
     (item: VaultItemResponse, key: Uint8Array, cipher: XChaCha20Poly1305Aead): VaultViewItem => {
@@ -137,6 +152,36 @@ export function Vault() {
     [],
   );
 
+  const decryptFolder = useCallback(
+    (f: FolderResponse, key: Uint8Array, cipher: XChaCha20Poly1305Aead): VaultFolder => {
+      try {
+        const name = decryptVaultItem({
+          payload: {
+            version: "xchacha20poly1305-v1",
+            nonce: f.nonce,
+            ciphertext: f.name_ciphertext,
+            wrappedDek: "", // Folders don't use DEK, encrypted with master key
+            wrapNonce: "",
+          },
+          kek: key,
+          aead: cipher,
+        });
+        return {
+          id: f.id,
+          name,
+          updatedAt: f.updated_at,
+        };
+      } catch {
+        return {
+          id: f.id,
+          name: "Corrupted Folder",
+          updatedAt: f.updated_at,
+        };
+      }
+    },
+    [],
+  );
+
   const verifyKek = useCallback(
     (item: VaultItemResponse, key: Uint8Array, cipher: XChaCha20Poly1305Aead): boolean => {
       try {
@@ -164,12 +209,18 @@ export function Vault() {
       setLoadingItems(true);
       setError("");
       try {
-        const all = sourceItems ?? (await vaultService.listItems()).items;
+        const [itemsResp, foldersResp] = await Promise.all([
+          sourceItems ? { items: sourceItems } : vaultService.listItems(),
+          vaultService.listFolders(),
+        ]);
+
+        const all = itemsResp.items;
         const verifierItems = all.filter(isVerifierItem);
         if (verifierItems.length > 1) {
           throw new Error("Multiple vault verifiers detected. Vault recovery is required.");
         }
-        setVerifierItem(verifierItems[0] ?? null);
+        
+        setFolders(foldersResp.folders.map(f => decryptFolder(f, key, cipher)));
         setItems(all.filter((i) => !isVerifierItem(i)).map((i) => decryptItem(i, key, cipher)));
       } catch (err) {
         setError(err instanceof Error ? err.message : "Failed to load vault items");
@@ -177,7 +228,7 @@ export function Vault() {
         setLoadingItems(false);
       }
     },
-    [decryptItem],
+    [decryptFolder, decryptItem, setItems],
   );
 
   const upsertVerifierItem = useCallback(
@@ -217,55 +268,78 @@ export function Vault() {
   // ── Effects ────────────────────────────────────────────────────────────────
 
   useEffect(() => {
-    let active = true;
-    createDefaultXChaCha20Poly1305()
-      .then((cipher) => { if (active) setAead(cipher); })
-      .catch(() => { if (active) setError("Failed to initialize vault encryption"); });
-    return () => { active = false; };
-  }, []);
-
-  useEffect(() => {
     const now = new Date().toISOString();
     const displayName = session?.name?.trim() || "You";
-    lockVault();
     setMasterPassword("");
     setActiveVaultId(DEFAULT_PERSONAL_VAULT_ID);
     setVaultDirectory([
       { id: DEFAULT_PERSONAL_VAULT_ID, name: "Personal Vault", type: "personal", members: [displayName], updatedAt: now, isSystem: true },
       { id: DEFAULT_SHARED_VAULT_ID, name: "Family Shared Vault", type: "shared", members: [displayName, "Family"], updatedAt: now, isSystem: true },
     ]);
-  }, [lockVault, session?.userId, session?.name]);
+  }, [session?.userId, session?.name]);
 
   // ── Derived state ──────────────────────────────────────────────────────────
+  const allTags = useMemo(() => {
+    const tags = new Set<string>();
+    items.forEach(item => {
+      item.secret?.tags?.forEach(tag => tags.add(tag));
+    });
+    return Array.from(tags).sort();
+  }, [items]);
 
   const vaults = useMemo(() => {
-    const map = new Map<string, VaultCardModel>();
-    for (const entry of vaultDirectory) map.set(entry.id, { ...entry, itemCount: 0 });
+    const list: VaultCardModel[] = [
+      {
+        id: DEFAULT_PERSONAL_VAULT_ID,
+        name: "Personal Vault",
+        type: "personal",
+        members: [session?.name?.trim() || "You"],
+        updatedAt: new Date().toISOString(),
+        isSystem: true,
+        itemCount: 0,
+      },
+      {
+        id: DEFAULT_SHARED_VAULT_ID,
+        name: "Family Shared Vault",
+        type: "shared",
+        members: [session?.name?.trim() || "You", "Family"],
+        updatedAt: new Date().toISOString(),
+        isSystem: true,
+        itemCount: 0,
+      },
+    ];
+
+    // Add real backend folders as vaults
+    for (const f of folders) {
+      list.push({
+        id: f.id,
+        name: f.name,
+        type: "personal", // Folders are personal for now
+        members: [session?.name?.trim() || "You"],
+        updatedAt: f.updatedAt,
+        isSystem: false,
+        itemCount: 0,
+      });
+    }
+
+    // Calculate item counts
     for (const item of items) {
-      const existing = map.get(item.vaultId);
-      if (existing) {
-        existing.itemCount += 1;
-        if (new Date(item.updatedAt).getTime() > new Date(existing.updatedAt).getTime()) {
-          existing.updatedAt = item.updatedAt;
+      const targetId = item.folderId || item.vaultId;
+      const v = list.find((x) => x.id === targetId);
+      if (v) {
+        v.itemCount += 1;
+        if (new Date(item.updatedAt).getTime() > new Date(v.updatedAt).getTime()) {
+          v.updatedAt = item.updatedAt;
         }
-      } else {
-        map.set(item.vaultId, {
-          id: item.vaultId,
-          name: item.vaultName,
-          type: item.vaultType,
-          members: item.vaultType === "shared" ? ["You", "Family"] : [session?.name?.trim() || "You"],
-          updatedAt: item.updatedAt,
-          isSystem: false,
-          itemCount: 1,
-        });
       }
     }
-    return Array.from(map.values()).sort((a, b) => {
+
+    return list.sort((a, b) => {
       if (a.id === DEFAULT_PERSONAL_VAULT_ID) return -1;
       if (b.id === DEFAULT_PERSONAL_VAULT_ID) return 1;
       return a.name.localeCompare(b.name);
     });
-  }, [items, session?.name, vaultDirectory]);
+  }, [folders, items, session?.name]);
 
   useEffect(() => {
     if (!vaults.some((v) => v.id === activeVaultId) && vaults.length > 0) {
@@ -286,10 +360,25 @@ export function Vault() {
     [activeVaultId, vaults],
   );
 
-  const visibleItems = useMemo(
-    () => (activeVault ? items.filter((i) => i.vaultId === activeVault.id) : []),
-    [activeVault, items],
-  );
+  const visibleItems = useMemo(() => {
+    if (!activeVault) return [];
+    let filtered = items.filter((i) => i.vaultId === activeVault.id);
+
+    // Filter by selected folder in the sidebar (Multi-Vault)
+    if (selectedFolderId) {
+      filtered = filtered.filter((i) => i.folderId === selectedFolderId);
+    }
+
+    // Filter by active tags
+    if (tagFilter.length > 0) {
+      filtered = filtered.filter((i) => {
+        if (!i.secret?.tags) return false;
+        return tagFilter.every((t) => i.secret?.tags?.includes(t));
+      });
+    }
+
+    return filtered;
+  }, [activeVault, items, selectedFolderId, tagFilter]);
 
   const corruptedCount = useMemo(
     () => visibleItems.filter((i) => i.isCorrupted).length,
@@ -324,10 +413,8 @@ export function Vault() {
         const derived = await deriveMasterKey({ password: passwordInput, kdf, salt });
         candidateKey = derived.key;
         if (!verifyKek(existingVerifier, candidateKey, aead)) throw new Error("Incorrect vault passphrase");
-        setKek(candidateKey);
+        setVaultSession(candidateKey, existingVerifier, true);
         candidateKey = null;
-        setIsKekVerified(true);
-        setVerifierItem(existingVerifier);
         await loadItems(derived.key, aead, allItems);
         toast.success("Vault unlocked");
         return;
@@ -349,10 +436,8 @@ export function Vault() {
 
       const createdVerifier = await upsertVerifierItem(derived.key, salt, aead, null);
 
-      setKek(derived.key);
+      setVaultSession(derived.key, createdVerifier, true);
       candidateKey = null;
-      setIsKekVerified(true);
-      setVerifierItem(createdVerifier);
       await loadItems(derived.key, aead);
       toast.success(encryptedDataItems.length > 0 ? "Vault unlocked and verifier secured" : "Vault unlocked");
     } catch (err) {
@@ -369,19 +454,24 @@ export function Vault() {
     if (!activeVault) { setError("Select a vault first"); return; }
     if (!(await ensureVerifiedWriteAccess())) return;
     if (!kek || !aead) return;
-    if (!draft.title.trim() || !draft.password.trim()) { setError("Title and password are required"); return; }
+    if (!draft.title.trim()) { setError("Title is required"); return; }
+    if (draft.kind === "login" && !(draft as any).password?.trim()) { 
+      setError("Password is required for login items"); 
+      return; 
+    }
 
     setSaving(true);
     setError("");
     try {
       const payload = encryptVaultItem({ plaintext: JSON.stringify(draft), kek, aead });
       const request = {
+        folder_id: itemFolderId,
         ciphertext: payload.ciphertext,
         nonce: payload.nonce,
         wrapped_dek: payload.wrappedDek,
         wrap_nonce: payload.wrapNonce,
         algo_version: payload.version,
-        metadata: { kind: "login", vault_id: activeVault.id, vault_name: activeVault.name, vault_type: activeVault.type },
+        metadata: { kind: draft.kind, vault_id: activeVault.id, vault_name: activeVault.name, vault_type: activeVault.type },
       };
       if (editingItemId) {
         await vaultService.updateItem(editingItemId, request);
@@ -389,6 +479,7 @@ export function Vault() {
         await vaultService.createItem(request);
       }
       setDraft(DEFAULT_SECRET);
+      setItemFolderId(undefined);
       setEditingItemId(null);
       setShowItemModal(false);
       await loadItems(kek, aead);
@@ -431,33 +522,35 @@ export function Vault() {
     const updatedAt = new Date().toISOString();
 
     if (vaultModalMode === "create") {
-      const createdId = buildVaultId(name);
-      setVaultDirectory((prev) => [
-        ...prev,
-        {
-          id: createdId,
-          name,
-          type: vaultForm.type,
-          members: vaultForm.type === "shared" ? (members.length > 0 ? members : ["You", "Family"]) : [session?.name?.trim() || "You"],
-          updatedAt,
-          isSystem: false,
-        },
-      ]);
-      setActiveVaultId(createdId);
-      toast.success("Vault created");
-    } else if (editingVaultId) {
-      setVaultDirectory((prev) => {
-        const found = prev.some((e) => e.id === editingVaultId);
-        if (!found) {
-          return [...prev, { id: editingVaultId, name, type: vaultForm.type, members: vaultForm.type === "shared" ? (members.length > 0 ? members : ["You", "Family"]) : [session?.name?.trim() || "You"], updatedAt, isSystem: false }];
+      void (async () => {
+        try {
+          if (!kek || !aead) return;
+          const payload = encryptVaultItem({ plaintext: name, kek, aead });
+          await vaultService.createFolder({
+            name_ciphertext: payload.ciphertext,
+            nonce: payload.nonce,
+          });
+          await loadItems(kek, aead);
+          toast.success("Folder created");
+        } catch (err) {
+          setError("Failed to create folder");
         }
-        return prev.map((e) =>
-          e.id !== editingVaultId
-            ? e
-            : { ...e, name, type: vaultForm.type, members: vaultForm.type === "shared" ? (members.length > 0 ? members : ["You", "Family"]) : [session?.name?.trim() || "You"], updatedAt },
-        );
-      });
-      toast.success("Vault updated");
+      })();
+    } else if (editingVaultId) {
+      void (async () => {
+         try {
+          if (!kek || !aead) return;
+          const payload = encryptVaultItem({ plaintext: name, kek, aead });
+          await vaultService.updateFolder(editingVaultId, {
+            name_ciphertext: payload.ciphertext,
+            nonce: payload.nonce,
+          });
+          await loadItems(kek, aead);
+          toast.success("Folder updated");
+        } catch (err) {
+          setError("Failed to update folder");
+        }
+      })();
     }
     setShowVaultModal(false);
   };
@@ -473,9 +566,13 @@ export function Vault() {
     }
     const confirmed = await dialog.confirm({ title: "Delete vault", message: `Delete ${vault.name}?`, confirmLabel: "Delete vault", cancelLabel: "Cancel" });
     if (!confirmed) return;
-    setVaultDirectory((prev) => prev.filter((e) => e.id !== vault.id));
-    if (activeVaultId === vault.id) setActiveVaultId(DEFAULT_PERSONAL_VAULT_ID);
-    toast.success("Vault deleted");
+    try {
+      await vaultService.deleteFolder(vault.id);
+      if (aead && kek) await loadItems(kek, aead);
+      toast.success("Folder deleted");
+    } catch (err) {
+      setError("Failed to delete folder");
+    }
   };
 
   const handleManageMembers = (vault: VaultCardModel) => {
@@ -509,6 +606,7 @@ export function Vault() {
     if (!item.secret || item.isCorrupted) return;
     setEditingItemId(item.id);
     setDraft(item.secret);
+    setItemFolderId(item.folderId);
     setError("");
     setShowItemModal(true);
   };
@@ -516,6 +614,7 @@ export function Vault() {
   const cancelEdit = () => {
     setEditingItemId(null);
     setDraft(DEFAULT_SECRET);
+    setItemFolderId(undefined);
     setError("");
     setShowItemModal(false);
   };
@@ -536,82 +635,170 @@ export function Vault() {
   }
 
   return (
-    <div style={{ display: "flex", flexDirection: "column", gap: "1.5rem" }}>
-      <VaultGrid
-        vaults={filteredVaults}
+    <div
+      style={{
+        display: "flex",
+        height: "calc(100vh)",
+        margin: "-2rem",
+        backgroundColor: "var(--color-white)",
+        overflow: "hidden",
+      }}
+    >
+
+      <VaultSidebar
+        vaults={vaults}
         activeVaultId={activeVaultId}
-        vaultQuery={vaultQuery}
-        vaultFilter={vaultFilter}
-        onQueryChange={setVaultQuery}
-        onFilterChange={setVaultFilter}
-        onCreateVault={openCreateVaultModal}
-        onOpenVault={setActiveVaultId}
-        onEditVault={openEditVaultModal}
-        onDeleteVault={(v) => void handleDeleteVault(v)}
-        onManageMembers={handleManageMembers}
+        onSelectVault={setActiveVaultId}
+        onCreateFolder={openCreateVaultModal}
+        onEditFolder={openEditVaultModal}
+        onDeleteFolder={(v) => void handleDeleteVault(v)}
       />
 
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-        <h2 style={{ fontSize: "1.25rem", fontWeight: 600, color: "var(--color-text-main)", margin: 0 }}>
-          {activeVault?.name ?? "Vault"}
-        </h2>
-        <div style={{ display: "flex", gap: "0.75rem", alignItems: "center" }}>
-          <button
-            type="button"
-            onClick={() => lockVault()}
-            style={{
-              fontSize: "0.875rem",
-              fontWeight: 600,
-              color: "var(--color-text-subtle)",
-              background: "none",
-              border: "none",
-              cursor: "pointer",
-            }}
-          >
-            🔒 Lock vault
-          </button>
-          <button
-            type="button"
-            onClick={openCreateItemModal}
-            className="btn btn-primary"
-            style={{ padding: "0.5rem 1rem" }}
-          >
-            + Add Item
-          </button>
+      <div
+        style={{
+          flex: 1,
+          display: "flex",
+          flexDirection: "column",
+          padding: "2rem",
+          overflowY: "auto",
+          gap: "1.5rem",
+        }}
+      >
+        {/* Sub Header with Search and Actions */}
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between",
+            gap: "1.5rem",
+            backgroundColor: "var(--color-white)",
+            padding: "1.25rem 1.5rem",
+            borderRadius: "1.25rem",
+            border: "1px solid var(--color-border)",
+            boxShadow: "var(--shadow-sm)",
+          }}
+        >
+          <div style={{ display: "flex", alignItems: "center", gap: "1rem", flex: 1 }}>
+            <div style={{ position: "relative", flex: 1, maxWidth: "24rem" }}>
+              <Search
+                size={16}
+                style={{
+                  position: "absolute",
+                  left: "0.875rem",
+                  top: "50%",
+                  transform: "translateY(-50%)",
+                  color: "var(--color-text-light)",
+                  pointerEvents: "none",
+                }}
+              />
+              <Input
+                type="search"
+                placeholder={`Search in ${activeVault?.name}...`}
+                value={vaultQuery}
+                onChange={(e) => setVaultQuery(e.target.value)}
+                style={{ paddingLeft: "2.5rem" }}
+              />
+            </div>
+
+          <div style={{ width: "12rem" }}>
+            <Select
+              options={[
+                { value: "all", label: "All Items" },
+                { value: "personal", label: "Personal" },
+                { value: "shared", label: "Shared" },
+              ]}
+              value={vaultFilter}
+              onChange={(val) => setVaultFilter(val as any)}
+            />
+          </div>
+          </div>
+
+          <div style={{ display: "flex", gap: "0.75rem" }}>
+            <Button
+              variant="outline"
+              onClick={() => lockVault()}
+              style={{ gap: "0.5rem" }}
+            >
+              🔒 Lock
+            </Button>
+            <Button onClick={openCreateItemModal} style={{ gap: "0.5rem" }}>
+              <Plus size={18} />
+              Add Item
+            </Button>
+          </div>
         </div>
+
+        {/* Tags Filter */}
+        {visibleItems.length > 0 && (
+          <div style={{ display: "flex", flexWrap: "wrap", gap: "0.5rem", alignItems: "center" }}>
+            <div style={{ color: "var(--color-text-light)", fontSize: "0.75rem", fontWeight: 600, textTransform: "uppercase" }}>
+              Filter by Tag:
+            </div>
+            {Array.from(new Set(items.filter(i => i.vaultId === activeVault?.id || i.folderId === activeVault?.id).flatMap(i => i.secret?.tags || []))).sort().map(tag => (
+              <button
+                key={tag}
+                onClick={() => {
+                  setTagFilter(prev => prev.includes(tag) ? prev.filter(t => t !== tag) : [...prev, tag]);
+                }}
+                style={{
+                  fontSize: "0.75rem",
+                  padding: "0.25rem 0.875rem",
+                  borderRadius: "2rem",
+                  border: "1px solid var(--color-border)",
+                  background: tagFilter.includes(tag) ? "var(--color-primary)" : "var(--color-white)",
+                  color: tagFilter.includes(tag) ? "white" : "var(--color-text-main)",
+                  cursor: "pointer",
+                  transition: "all 0.2s",
+                  boxShadow: "var(--shadow-sm)"
+                }}
+              >
+                {tag}
+              </button>
+            ))}
+            {tagFilter.length > 0 && (
+               <Button variant="ghost" onClick={() => setTagFilter([])} style={{ fontSize: "0.75rem", height: "auto", padding: "0.25rem 0.5rem" }}>
+                 Clear
+               </Button>
+            )}
+          </div>
+        )}
+
+        <VaultItemsList
+          items={visibleItems}
+          loading={loadingItems}
+          onRefresh={() => { if (aead && kek) void loadItems(kek, aead); }}
+          onEdit={startEdit}
+          onDelete={(item) => void handleDelete(item)}
+        />
+
+        {showItemModal && (
+          <VaultItemForm
+            vaultName={activeVault?.name ?? ""}
+            folders={folders}
+            selectedFolderId={itemFolderId}
+            draft={draft}
+            saving={saving}
+            isEditing={!!editingItemId}
+            error={error}
+            corruptedCount={corruptedCount}
+            onDraftChange={setDraft}
+            onFolderChange={setItemFolderId}
+            onSubmit={handleCreateItem}
+            onClose={cancelEdit}
+            allTags={allTags}
+          />
+        )}
+
+        {showVaultModal && (
+          <VaultModal
+            mode={vaultModalMode}
+            form={vaultForm}
+            onFormChange={setVaultForm}
+            onSubmit={handleSaveVault}
+            onClose={() => setShowVaultModal(false)}
+          />
+        )}
       </div>
-
-      {showItemModal && (
-        <VaultItemForm
-          vaultName={activeVault?.name ?? ""}
-          draft={draft}
-          saving={saving}
-          isEditing={!!editingItemId}
-          error={error}
-          corruptedCount={corruptedCount}
-          onDraftChange={setDraft}
-          onSubmit={handleCreateItem}
-          onClose={cancelEdit}
-        />
-      )}
-
-      <VaultItemsList
-        items={visibleItems}
-        loading={loadingItems}
-        onRefresh={() => { if (aead && kek) void loadItems(kek, aead); }}
-        onEdit={startEdit}
-        onDelete={(item) => void handleDelete(item)}
-      />
-
-      {showVaultModal && (
-        <VaultModal
-          mode={vaultModalMode}
-          form={vaultForm}
-          onFormChange={setVaultForm}
-          onSubmit={handleSaveVault}
-          onClose={() => setShowVaultModal(false)}
-        />
-      )}
     </div>
   );
 }

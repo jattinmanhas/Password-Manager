@@ -8,8 +8,11 @@ import type { VaultItemResponse } from "./types";
 import {
   DEFAULT_PERSONAL_VAULT_ID,
   DEFAULT_SECRET,
+  type BankSecret,
+  type CardSecret,
   type VaultMetadata,
   type VaultSecret,
+  type VaultSecretKind,
   type VaultType,
 } from "./vault.types";
 
@@ -33,12 +36,48 @@ export function asObject(input: unknown): Record<string, unknown> | null {
 export function normalizeSecret(input: unknown): VaultSecret {
   const value = asObject(input);
   if (!value) return DEFAULT_SECRET;
-  return {
-    title: typeof value.title === "string" ? value.title : "",
-    username: typeof value.username === "string" ? value.username : "",
-    password: typeof value.password === "string" ? value.password : "",
-    notes: typeof value.notes === "string" ? value.notes : "",
-  };
+
+  const kind = typeof value.kind === "string" ? (value.kind as VaultSecretKind) : "login";
+  const title = typeof value.title === "string" ? value.title : "";
+  const notes = typeof value.notes === "string" ? value.notes : "";
+  const tags = Array.isArray(value.tags) ? (value.tags as string[]) : [];
+
+  const base = { title, notes, tags };
+
+  switch (kind) {
+    case "card":
+      return {
+        ...base,
+        kind: "card",
+        cardholderName: typeof value.cardholderName === "string" ? value.cardholderName : "",
+        cardNumber: typeof value.cardNumber === "string" ? value.cardNumber : "",
+        expiryDate: typeof value.expiryDate === "string" ? value.expiryDate : "",
+        cvv: typeof value.cvv === "string" ? value.cvv : "",
+        cardType: (typeof value.cardType === "string" ? value.cardType : "other") as CardSecret["cardType"],
+      };
+    case "bank":
+      return {
+        ...base,
+        kind: "bank",
+        bankName: typeof value.bankName === "string" ? value.bankName : "",
+        accountNumber: typeof value.accountNumber === "string" ? value.accountNumber : "",
+        routingNumber: typeof value.routingNumber === "string" ? value.routingNumber : "",
+        accountType: (typeof value.accountType === "string" ? value.accountType : "other") as BankSecret["accountType"],
+      };
+    case "note":
+      return {
+        ...base,
+        kind: "note",
+      };
+    case "login":
+    default:
+      return {
+        ...base,
+        kind: "login",
+        username: typeof value.username === "string" ? value.username : "",
+        password: typeof value.password === "string" ? value.password : "",
+      };
+  }
 }
 
 export function normalizeVaultType(input: unknown): VaultType {
