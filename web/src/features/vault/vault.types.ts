@@ -21,8 +21,8 @@ export interface CardFields {
 export interface BankFields {
   bankName: string;
   accountNumber: string;
-  routingNumber: string;
-  accountType: "checking" | "savings" | "other";
+  ifscCode: string;
+  accountType: "checking" | "savings" | "current" | "other";
 }
 
 export interface BaseSecret {

@@ -1,5 +1,8 @@
-import { type FormEvent } from "react";
-import { X } from "lucide-react";
+import { type FormEvent, useState, useEffect } from "react";
+import { X, RefreshCw, Eye, EyeOff } from "lucide-react";
+import { useForm, Controller } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
+import { vaultItemSchema, type VaultItemFormData } from "../../../lib/validations/vault";
 
 import { Label } from "../../../components/ui/Label";
 import { Input } from "../../../components/ui/Input";
@@ -8,20 +11,18 @@ import { Select } from "../../../components/ui/Select";
 import { MultiSelect } from "../../../components/ui/MultiSelect";
 import type { VaultFolder, VaultSecret } from "../vault.types";
 import { PasswordGenerator } from "./PasswordGenerator";
-import { useState, useMemo } from "react";
 
 interface VaultItemFormProps {
   vaultName: string;
   folders: VaultFolder[];
   selectedFolderId: string | undefined;
-  draft: VaultSecret;
+  initialData: VaultSecret;
   saving: boolean;
   isEditing: boolean;
   error: string;
   corruptedCount: number;
-  onDraftChange: (draft: VaultSecret) => void;
   onFolderChange: (folderId: string | undefined) => void;
-  onSubmit: (e: FormEvent) => void;
+  onSubmit: (data: VaultItemFormData) => void;
   onClose: () => void;
   allTags: string[];
 }
@@ -30,18 +31,73 @@ export function VaultItemForm({
   vaultName,
   folders,
   selectedFolderId,
-  draft,
+  initialData,
   saving,
   isEditing,
   error,
   corruptedCount,
-  onDraftChange,
   onFolderChange,
   onSubmit,
   onClose,
   allTags,
 }: VaultItemFormProps) {
+  const itemForm = useForm<VaultItemFormData>({
+    resolver: zodResolver(vaultItemSchema),
+    defaultValues: {
+      kind: initialData.kind,
+      title: initialData.title,
+      notes: initialData.notes || "",
+      tags: initialData.tags || [],
+      ...((initialData as any).username && { username: (initialData as any).username }),
+      ...((initialData as any).password && { password: (initialData as any).password }),
+      ...((initialData as any).cardNumber && { cardNumber: (initialData as any).cardNumber }),
+      ...((initialData as any).cardType && { cardType: (initialData as any).cardType }),
+      ...((initialData as any).expiryDate && { expiryDate: (initialData as any).expiryDate }),
+      ...((initialData as any).cardholderName && { cardholderName: (initialData as any).cardholderName }),
+      ...((initialData as any).cvv && { cvv: (initialData as any).cvv }),
+      ...((initialData as any).bankName && { bankName: (initialData as any).bankName }),
+      ...((initialData as any).accountNumber && { accountNumber: (initialData as any).accountNumber }),
+      ...((initialData as any).ifscCode && { ifscCode: (initialData as any).ifscCode }),
+    } as any
+  });
+
+  const watchKind = itemForm.watch("kind");
+
   const [showGenerator, setShowGenerator] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
+
+  const handleCardNumberChange = (rawText: string) => {
+    let raw = rawText.replace(/\D/g, "");
+    let type = "other";
+    if (/^4/.test(raw)) type = "visa";
+    else if (/^5[1-5]/.test(raw)) type = "mastercard";
+    else if (/^3[47]/.test(raw)) type = "amex";
+
+    let formatted = raw;
+    if (type === "amex") {
+      const parts = [];
+      if (raw.length > 0) parts.push(raw.substring(0, 4));
+      if (raw.length > 4) parts.push(raw.substring(4, 10));
+      if (raw.length > 10) parts.push(raw.substring(10, 15));
+      formatted = parts.join("-");
+    } else {
+      const parts = raw.match(/.{1,4}/g);
+      formatted = parts?.join("-") || "";
+    }
+
+    itemForm.setValue("cardType" as "title", type, { shouldValidate: true });
+    return formatted;
+  };
+
+  const handleExpiryChange = (rawText: string) => {
+    let val = rawText.replace(/\D/g, "");
+    if (val.length > 4) val = val.substring(0, 4);
+    let formatted = val;
+    if (val.length >= 3) {
+      formatted = `${val.substring(0, 2)}/${val.substring(2, 4)}`;
+    }
+    return formatted;
+  };
 
   return (
     <div
@@ -94,32 +150,43 @@ export function VaultItemForm({
         </div>
       )}
 
-      <form className="form-stack" onSubmit={onSubmit}>
+      <form className="form-stack" onSubmit={itemForm.handleSubmit(onSubmit)}>
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "1rem" }}>
           <div className="form-group">
             <Label>Item Type</Label>
-            <Select
-              options={[
-                { value: "login", label: "Login" },
-                { value: "card", label: "Payment Card" },
-                { value: "bank", label: "Bank Account" },
-                { value: "note", label: "Secure Note" },
-              ]}
-              value={draft.kind}
-              onChange={(value) => {
-                const newKind = value as any;
-                const base = { title: draft.title, notes: draft.notes, tags: draft.tags, kind: newKind };
-                if (newKind === "login") {
-                  onDraftChange({ ...base, username: "", password: "" });
-                } else if (newKind === "card") {
-                  onDraftChange({ ...base, cardholderName: "", cardNumber: "", expiryDate: "", cvv: "", cardType: "other" });
-                } else if (newKind === "bank") {
-                  onDraftChange({ ...base, bankName: "", accountNumber: "", routingNumber: "", accountType: "other" });
-                } else {
-                  onDraftChange({ ...base });
-                }
-              }}
-              disabled={saving}
+            <Controller
+              name="kind"
+              control={itemForm.control}
+              render={({ field }) => (
+                <Select
+                  options={[
+                    { value: "login", label: "Login" },
+                    { value: "card", label: "Payment Card" },
+                    { value: "bank", label: "Bank Account" },
+                    { value: "note", label: "Secure Note" },
+                  ]}
+                  value={field.value}
+                  onChange={(value) => {
+                    const newKind = value as any;
+                    field.onChange(newKind);
+                    if (newKind === "login") {
+                      itemForm.setValue("username" as any, "");
+                      itemForm.setValue("password" as any, "");
+                    } else if (newKind === "card") {
+                      itemForm.setValue("cardholderName" as any, "");
+                      itemForm.setValue("cardNumber" as any, "");
+                      itemForm.setValue("expiryDate" as any, "");
+                      itemForm.setValue("cvv" as any, "");
+                      itemForm.setValue("cardType" as any, "other");
+                    } else if (newKind === "bank") {
+                      itemForm.setValue("bankName" as any, "");
+                      itemForm.setValue("accountNumber" as any, "");
+                      itemForm.setValue("ifscCode" as any, "");
+                    }
+                  }}
+                  disabled={saving}
+                />
+              )}
             />
           </div>
 
@@ -140,12 +207,18 @@ export function VaultItemForm({
 
         <div className="form-group">
           <Label>Tags</Label>
-          <MultiSelect
-            placeholder="Search or add tags..."
-            options={allTags}
-            value={draft.tags || []}
-            onChange={(tags) => onDraftChange({ ...draft, tags })}
-            disabled={saving}
+          <Controller
+            name="tags"
+            control={itemForm.control}
+            render={({ field }) => (
+              <MultiSelect
+                placeholder="Search or add tags..."
+                options={allTags}
+                value={field.value || []}
+                onChange={field.onChange}
+                disabled={saving}
+              />
+            )}
           />
         </div>
 
@@ -154,16 +227,15 @@ export function VaultItemForm({
           <Input
             id="item-title"
             type="text"
-            placeholder="e.g. GitHub or Chase Card"
-            value={draft.title}
-            onChange={(e) => onDraftChange({ ...draft, title: e.target.value })}
+            placeholder="e.g. GitHub or HDFC Card"
+            {...itemForm.register("title")}
+            error={itemForm.formState.errors.title?.message}
             disabled={saving}
-            required
           />
         </div>
 
         {/* Conditional Fields based on Kind */}
-        {draft.kind === "login" && (
+        {watchKind === "login" && (
           <>
             <div className="form-group">
               <Label htmlFor="item-username">Username / Email</Label>
@@ -171,86 +243,156 @@ export function VaultItemForm({
                 id="item-username"
                 type="text"
                 placeholder="e.g. user@email.com"
-                value={(draft as any).username || ""}
-                onChange={(e) => onDraftChange({ ...draft, username: e.target.value } as any)}
+                {...itemForm.register("username" as "title")} // Using typecast since discriminated union in TS may not perfectly merge register keys
+                error={(itemForm.formState.errors as any).username?.message as string}
                 disabled={saving}
               />
             </div>
             <div className="form-group">
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                <Label htmlFor="item-password">Password</Label>
-                <Button
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "0.5rem" }}>
+                <Label htmlFor="item-password" style={{ marginBottom: 0 }}>Password</Label>
+                <button
                   type="button"
-                  variant="ghost"
-                  size="sm"
                   onClick={() => setShowGenerator(!showGenerator)}
-                  style={{ padding: "0.25rem 0.5rem", height: "auto", fontSize: "0.875rem" }}
-                >
-                  {showGenerator ? "Hide Generator" : "Generate"}
-                </Button>
-              </div>
-              <Input
-                id="item-password"
-                type="text"
-                placeholder="Enter password"
-                value={(draft as any).password || ""}
-                onChange={(e) => onDraftChange({ ...draft, password: e.target.value } as any)}
-                disabled={saving}
-                required
-              />
-              {showGenerator && (
-                <PasswordGenerator
-                  onUsePassword={(password) => {
-                    onDraftChange({ ...draft, password } as any);
-                    setShowGenerator(false);
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    gap: "0.375rem",
+                    fontSize: "0.75rem",
+                    fontWeight: 600,
+                    color: showGenerator ? "var(--color-text-subtle)" : "var(--color-security-blue)",
+                    background: showGenerator ? "var(--color-soft-gray)" : "rgba(37, 99, 235, 0.1)",
+                    border: "none",
+                    padding: "0.375rem 0.75rem",
+                    borderRadius: "1rem",
+                    cursor: "pointer",
+                    transition: "all 0.2s"
                   }}
-                  onCancel={() => setShowGenerator(false)}
+                >
+                  <RefreshCw size={12} className={showGenerator ? "" : "animate-spin-slow"} style={{ animationDuration: '3s' }} />
+                  {showGenerator ? "Cancel Generation" : "Generate Strong Password"}
+                </button>
+              </div>
+              <div style={{ position: "relative" }}>
+                <Input
+                  id="item-password"
+                  type={showPassword ? "text" : "password"}
+                  placeholder="Enter password"
+                  {...itemForm.register("password" as "title")}
+                  error={(itemForm.formState.errors as any).password?.message as string}
+                  disabled={saving}
+                  style={{ paddingRight: "2.5rem" }}
                 />
-              )}
+                <button
+                  type="button"
+                  onClick={() => setShowPassword(!showPassword)}
+                  style={{
+                    position: "absolute",
+                    right: "0.75rem",
+                    top: "50%",
+                    transform: "translateY(-50%)",
+                    background: "none",
+                    border: "none",
+                    color: "var(--color-text-light)",
+                    cursor: "pointer",
+                    padding: 0,
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                  }}
+                  title={showPassword ? "Hide password" : "Show password"}
+                >
+                  {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+                </button>
+              </div>
+              <div>
+                {showGenerator && (
+                  <div style={{
+                    marginTop: "1rem",
+                    background: "var(--color-soft-gray)",
+                    border: "1px solid var(--color-border)",
+                    borderRadius: "var(--radius-xl)",
+                    padding: "1rem",
+                  }}>
+                    <PasswordGenerator
+                      onUsePassword={(password) => {
+                        itemForm.setValue("password" as "title", password, { shouldValidate: true });
+                        setShowGenerator(false);
+                      }}
+                      onCancel={() => setShowGenerator(false)}
+                    />
+                  </div>
+                )}
+              </div>
             </div>
           </>
         )}
 
-        {draft.kind === "card" && (
+        {watchKind === "card" && (
           <>
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "1rem" }}>
               <div className="form-group">
                 <Label htmlFor="card-number">Card Number</Label>
-                <Input
-                  id="card-number"
-                  type="text"
-                  placeholder="0000 0000 0000 0000"
-                  value={(draft as any).cardNumber || ""}
-                  onChange={(e) => onDraftChange({ ...draft, cardNumber: e.target.value } as any)}
-                  disabled={saving}
+                <Controller
+                  name="cardNumber"
+                  control={itemForm.control}
+                  render={({ field }) => (
+                    <Input
+                      id="card-number"
+                      type="text"
+                      placeholder="0000-0000-0000-0000"
+                      {...field}
+                      onChange={(e) => {
+                        const formatted = handleCardNumberChange(e.target.value);
+                        field.onChange(formatted);
+                      }}
+                      error={(itemForm.formState.errors as any).cardNumber?.message as string}
+                      disabled={saving}
+                    />
+                  )}
                 />
               </div>
               <div className="form-group">
-                <Label htmlFor="card-type">Card Type</Label>
-                <select
-                  id="card-type"
-                  className="input"
-                  value={(draft as any).cardType || "other"}
-                  onChange={(e) => onDraftChange({ ...draft, cardType: e.target.value } as any)}
-                  disabled={saving}
-                >
-                  <option value="visa">Visa</option>
-                  <option value="mastercard">Mastercard</option>
-                  <option value="amex">Amex</option>
-                  <option value="other">Other</option>
-                </select>
+                <Label>Card Type</Label>
+                <Controller
+                  name="cardType"
+                  control={itemForm.control}
+                  render={({ field }) => (
+                    <Select
+                      options={[
+                        { value: "visa", label: "Visa" },
+                        { value: "mastercard", label: "Mastercard" },
+                        { value: "amex", label: "Amex" },
+                        { value: "other", label: "Other" },
+                      ]}
+                      value={field.value}
+                      onChange={field.onChange}
+                      disabled={saving}
+                    />
+                  )}
+                />
               </div>
             </div>
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1.5fr 1fr", gap: "1rem" }}>
               <div className="form-group">
                 <Label htmlFor="card-expiry">Expiry</Label>
-                <Input
-                  id="card-expiry"
-                  type="text"
-                  placeholder="MM/YY"
-                  value={(draft as any).expiryDate || ""}
-                  onChange={(e) => onDraftChange({ ...draft, expiryDate: e.target.value } as any)}
-                  disabled={saving}
+                <Controller
+                  name="expiryDate"
+                  control={itemForm.control}
+                  render={({ field }) => (
+                    <Input
+                      id="card-expiry"
+                      type="text"
+                      placeholder="MM/YY"
+                      {...field}
+                      onChange={(e) => {
+                        const formatted = handleExpiryChange(e.target.value);
+                        field.onChange(formatted);
+                      }}
+                      error={(itemForm.formState.errors as any).expiryDate?.message as string}
+                      disabled={saving}
+                    />
+                  )}
                 />
               </div>
               <div className="form-group">
@@ -259,8 +401,8 @@ export function VaultItemForm({
                   id="card-holder"
                   type="text"
                   placeholder="John Doe"
-                  value={(draft as any).cardholderName || ""}
-                  onChange={(e) => onDraftChange({ ...draft, cardholderName: e.target.value } as any)}
+                  {...itemForm.register("cardholderName" as "title")}
+                  error={(itemForm.formState.errors as any).cardholderName?.message as string}
                   disabled={saving}
                 />
               </div>
@@ -270,8 +412,8 @@ export function VaultItemForm({
                   id="card-cvv"
                   type="password"
                   placeholder="123"
-                  value={(draft as any).cvv || ""}
-                  onChange={(e) => onDraftChange({ ...draft, cvv: e.target.value } as any)}
+                  {...itemForm.register("cvv" as "title")}
+                  error={(itemForm.formState.errors as any).cvv?.message as string}
                   disabled={saving}
                 />
               </div>
@@ -279,16 +421,16 @@ export function VaultItemForm({
           </>
         )}
 
-        {draft.kind === "bank" && (
+        {watchKind === "bank" && (
           <>
             <div className="form-group">
               <Label htmlFor="bank-name">Bank Name</Label>
               <Input
                 id="bank-name"
                 type="text"
-                placeholder="e.g. Chase"
-                value={(draft as any).bankName || ""}
-                onChange={(e) => onDraftChange({ ...draft, bankName: e.target.value } as any)}
+                placeholder="e.g. HDFC Bank"
+                {...itemForm.register("bankName" as "title")}
+                error={(itemForm.formState.errors as any).bankName?.message as string}
                 disabled={saving}
               />
             </div>
@@ -298,18 +440,18 @@ export function VaultItemForm({
                 <Input
                   id="bank-acc"
                   type="text"
-                  value={(draft as any).accountNumber || ""}
-                  onChange={(e) => onDraftChange({ ...draft, accountNumber: e.target.value } as any)}
+                  {...itemForm.register("accountNumber" as "title")}
+                  error={(itemForm.formState.errors as any).accountNumber?.message as string}
                   disabled={saving}
                 />
               </div>
               <div className="form-group">
-                <Label htmlFor="bank-routing">Routing Number</Label>
+                <Label htmlFor="bank-ifsc">IFSC Code</Label>
                 <Input
-                  id="bank-routing"
+                  id="bank-ifsc"
                   type="text"
-                  value={(draft as any).routingNumber || ""}
-                  onChange={(e) => onDraftChange({ ...draft, routingNumber: e.target.value } as any)}
+                  {...itemForm.register("ifscCode" as "title")}
+                  error={(itemForm.formState.errors as any).ifscCode?.message as string}
                   disabled={saving}
                 />
               </div>
@@ -330,8 +472,7 @@ export function VaultItemForm({
               height: "auto",
             }}
             placeholder="Optional notes…"
-            value={draft.notes}
-            onChange={(e) => onDraftChange({ ...draft, notes: e.target.value })}
+            {...itemForm.register("notes")}
             disabled={saving}
           />
         </div>

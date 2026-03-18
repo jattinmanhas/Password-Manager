@@ -79,12 +79,17 @@ ALTER TABLE IF EXISTS vault_items ADD COLUMN IF NOT EXISTS wrap_nonce BYTEA;
 CREATE TABLE IF NOT EXISTS vault_shares (
   item_id UUID NOT NULL REFERENCES vault_items(id) ON DELETE CASCADE,
   user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  shared_by_user_id UUID REFERENCES users(id) ON DELETE SET NULL,
   dek_wrapped BYTEA NOT NULL,
+  wrap_nonce BYTEA,
   permissions TEXT NOT NULL DEFAULT 'read',
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   PRIMARY KEY (item_id, user_id)
 );
+
+ALTER TABLE IF EXISTS vault_shares ADD COLUMN IF NOT EXISTS shared_by_user_id UUID REFERENCES users(id) ON DELETE SET NULL;
+ALTER TABLE IF EXISTS vault_shares ADD COLUMN IF NOT EXISTS wrap_nonce BYTEA;
 
 CREATE TABLE IF NOT EXISTS vault_attachments (
   id UUID PRIMARY KEY,

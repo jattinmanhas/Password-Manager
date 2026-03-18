@@ -13,6 +13,13 @@ export function DashboardLayout() {
     
     const [isCollapsed, setIsCollapsed] = useState(false);
     const [isMobileOpen, setIsMobileOpen] = useState(false);
+    const [isMobile, setIsMobile] = useState(typeof window !== 'undefined' && window.innerWidth < 768);
+
+    useEffect(() => {
+        const handleResize = () => setIsMobile(window.innerWidth < 768);
+        window.addEventListener("resize", handleResize);
+        return () => window.removeEventListener("resize", handleResize);
+    }, []);
 
     // Close mobile menu when route changes
     useEffect(() => {
@@ -120,14 +127,14 @@ export function DashboardLayout() {
                     bottom: 0,
                     left: 0,
                     zIndex: 50,
-                    width: isCollapsed ? "5rem" : "16rem",
+                    width: isMobile ? "16rem" : (isCollapsed ? "5rem" : "16rem"),
                     backgroundColor: "var(--color-white)",
                     borderRight: "1px solid var(--color-border)",
                     boxShadow: "0 4px 6px -1px rgba(0,0,0,0.05)",
                     display: "flex",
                     flexDirection: "column",
                     transition: "width 0.2s ease-in-out, transform 0.2s ease-in-out",
-                    transform: `translateX(${typeof window !== 'undefined' && window.innerWidth < 768 && !isMobileOpen ? '-100%' : '0'})`,
+                    transform: isMobile ? (isMobileOpen ? 'translateX(0)' : 'translateX(-100%)') : 'none',
                 }}
             >
                 {/* Logo Area */}
@@ -259,7 +266,7 @@ export function DashboardLayout() {
                 flex: 1, 
                 display: "flex", 
                 flexDirection: "column",
-                marginLeft: typeof window !== 'undefined' && window.innerWidth >= 768 ? (isCollapsed ? "5rem" : "16rem") : "0",
+                marginLeft: isMobile ? "0" : (isCollapsed ? "5rem" : "16rem"),
                 transition: "margin-left 0.2s ease-in-out"
             }}>
                 {/* Mobile Top Bar */}

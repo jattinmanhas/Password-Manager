@@ -9,14 +9,27 @@ import toast from "react-hot-toast";
 import { useAuth } from "../../../app/providers/AuthProvider";
 import { ShieldCheck, ShieldAlert, Key } from "lucide-react";
 import { useDialog } from "../../../app/providers/DialogProvider";
+import { useForm, Controller } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
+import { totpSetupSchema, type TotpSetupFormData } from "../../../lib/validations/auth";
+const Wrapper = ({ children }: { children: React.ReactNode }) => (
+    <div style={{ display: "flex", alignItems: "center", justifyContent: "center", minHeight: "calc(100vh - 8rem)", padding: "1rem" }}>
+        <div style={{ width: "100%", maxWidth: "32rem" }}>
+            {children}
+        </div>
+    </div>
+);
 
 export function TOTPSetup() {
     const { session, isLoading, refreshSession } = useAuth();
     const dialog = useDialog();
     const [secretUrl, setSecretUrl] = useState("");
     const [secret, setSecret] = useState("");
-    const [code, setCode] = useState("");
-    const [error, setError] = useState("");
+    const totpForm = useForm<TotpSetupFormData>({
+        resolver: zodResolver(totpSetupSchema),
+        defaultValues: { code: "" }
+    });
+    const [apiError, setApiError] = useState("");
     const [loading, setLoading] = useState(false);
     const [setupError, setSetupError] = useState("");
     const [recoveryCodes, setRecoveryCodes] = useState<string[]>([]);
@@ -44,26 +57,19 @@ export function TOTPSetup() {
         }
     }, [isLoading, session]);
 
-    const handleEnable = async (e: React.FormEvent) => {
-        e.preventDefault();
-        setError("");
-        
-        if (code.length !== 6) {
-            setError("Code must be 6 digits");
-            return;
-        }
-
+    const onEnableSubmit = async (data: TotpSetupFormData) => {
+        setApiError("");
         setLoading(true);
         try {
-            const res = await authService.enableTOTP(code);
+            const res = await authService.enableTOTP(data.code);
             setRecoveryCodes(res.recovery_codes);
             await refreshSession();
             toast.success("Two-Factor Authentication Enabled!");
         } catch (err) {
             if (err instanceof ApiError) {
-                setError(err.message);
+                setApiError(err.message);
             } else {
-                setError("Failed to verify code");
+                setApiError("Failed to verify code");
             }
         } finally {
             setLoading(false);
@@ -87,7 +93,7 @@ export function TOTPSetup() {
             toast.success("Two-Factor Authentication Disabled");
             setSecretUrl("");
             setSecret("");
-            setCode("");
+            totpForm.reset();
         } catch (err: any) {
             toast.error(err.message || "Failed to disable 2FA");
         } finally {
@@ -97,17 +103,17 @@ export function TOTPSetup() {
 
     if (setupError) {
         return (
-            <div style={{ maxWidth: "28rem", margin: "0 auto" }}>
+            <Wrapper>
                 <Card>
                     <div className="alert-error">{setupError}</div>
                 </Card>
-            </div>
+            </Wrapper>
         );
     }
 
     if (session?.isTotpEnabled && recoveryCodes.length === 0) {
         return (
-            <div style={{ maxWidth: "28rem", margin: "0 auto" }}>
+            <Wrapper>
                 <Card>
                     <div style={{ textAlign: "center", marginBottom: "2rem" }}>
                         <div style={{ 
@@ -146,13 +152,13 @@ export function TOTPSetup() {
                         Disable 2FA
                     </Button>
                 </Card>
-            </div>
+            </Wrapper>
         );
     }
 
     if (recoveryCodes.length > 0) {
         return (
-            <div style={{ maxWidth: "28rem", margin: "0 auto" }}>
+            <Wrapper>
                 <Card>
                     <h2 className="card-title">Setup Complete!</h2>
                     <p className="card-desc">Save these recovery codes in a secure place. They can be used to access your account if you lose your authenticator device.</p>
@@ -173,12 +179,12 @@ export function TOTPSetup() {
                         Finish Setup
                     </Button>
                 </Card>
-            </div>
+            </Wrapper>
         );
     }
 
     return (
-        <div style={{ maxWidth: "28rem", margin: "0 auto" }}>
+        <Wrapper>
             <Card>
                 <div style={{ marginBottom: "1.5rem", textAlign: "center" }}>
                     <div style={{ 
@@ -207,28 +213,34 @@ export function TOTPSetup() {
                     </div>
                 )}
 
-                {error && <div className="alert-error">{error}</div>}
+                {apiError && <div className="alert-error">{apiError}</div>}
 
-                <form onSubmit={handleEnable} className="form-stack">
+                <form onSubmit={totpForm.handleSubmit(onEnableSubmit)} className="form-stack">
                     <div className="form-group">
                         <Label htmlFor="code">Verification Code</Label>
-                        <Input
-                            id="code"
-                            type="text"
-                            placeholder="123456"
-                            autoComplete="one-time-code"
-                            maxLength={6}
-                            required
-                            value={code}
-                            onChange={(e) => setCode(e.target.value.replace(/\D/g, ''))}
-                            disabled={loading || !secretUrl}
+                        <Controller
+                            name="code"
+                            control={totpForm.control}
+                            render={({ field }) => (
+                                <Input
+                                    id="code"
+                                    type="text"
+                                    placeholder="123456"
+                                    autoComplete="one-time-code"
+                                    maxLength={6}
+                                    {...field}
+                                    onChange={(e) => field.onChange(e.target.value.replace(/\D/g, ''))}
+                                    disabled={loading || !secretUrl}
+                                    error={totpForm.formState.errors.code?.message}
+                                />
+                            )}
                         />
                     </div>
-                    <Button type="submit" isLoading={loading} disabled={!secretUrl || code.length !== 6}>
+                    <Button type="submit" isLoading={loading} disabled={!secretUrl}>
                         Verify & Enable
                     </Button>
                 </form>
             </Card>
-        </div>
+        </Wrapper>
     );
 }

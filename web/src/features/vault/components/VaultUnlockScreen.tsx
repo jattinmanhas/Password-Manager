@@ -1,5 +1,7 @@
 import { Lock } from "lucide-react";
-import { type FormEvent } from "react";
+import { useForm } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
+import { vaultUnlockSchema, type VaultUnlockFormData } from "../../../lib/validations/vault";
 
 import { Card } from "../../../components/ui/Card";
 import { Label } from "../../../components/ui/Label";
@@ -7,22 +9,22 @@ import { Input } from "../../../components/ui/Input";
 import { Button } from "../../../components/ui/Button";
 
 interface VaultUnlockScreenProps {
-  masterPassword: string;
   unlocking: boolean;
   aead: unknown | null;
   error: string;
-  onPasswordChange: (value: string) => void;
-  onSubmit: (e: FormEvent) => void;
+  onSubmit: (data: VaultUnlockFormData) => void;
 }
 
 export function VaultUnlockScreen({
-  masterPassword,
   unlocking,
   aead,
   error,
-  onPasswordChange,
   onSubmit,
 }: VaultUnlockScreenProps) {
+  const unlockForm = useForm<VaultUnlockFormData>({
+    resolver: zodResolver(vaultUnlockSchema),
+    defaultValues: { masterPassword: "" }
+  });
   return (
     <div className="auth-layout">
       <div className="auth-container">
@@ -36,7 +38,7 @@ export function VaultUnlockScreen({
 
         <Card>
           {error && <div className="alert-error">{error}</div>}
-          <form className="form-stack" onSubmit={onSubmit}>
+          <form className="form-stack" onSubmit={unlockForm.handleSubmit(onSubmit)}>
             <div className="form-group">
               <Label htmlFor="master-password">Vault Passphrase</Label>
               <Input
@@ -44,16 +46,15 @@ export function VaultUnlockScreen({
                 type="password"
                 autoComplete="current-password"
                 placeholder="Enter your master passphrase"
-                required
-                value={masterPassword}
-                onChange={(e) => onPasswordChange(e.target.value)}
+                {...unlockForm.register("masterPassword")}
+                error={unlockForm.formState.errors.masterPassword?.message}
                 disabled={unlocking || !aead}
               />
             </div>
             <Button
               type="submit"
               isLoading={unlocking}
-              disabled={!aead || masterPassword.length === 0}
+              disabled={!aead || !unlockForm.watch("masterPassword")}
             >
               Unlock Vault
             </Button>

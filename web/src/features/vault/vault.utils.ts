@@ -61,7 +61,7 @@ export function normalizeSecret(input: unknown): VaultSecret {
         kind: "bank",
         bankName: typeof value.bankName === "string" ? value.bankName : "",
         accountNumber: typeof value.accountNumber === "string" ? value.accountNumber : "",
-        routingNumber: typeof value.routingNumber === "string" ? value.routingNumber : "",
+        ifscCode: typeof value.ifscCode === "string" ? value.ifscCode : "",
         accountType: (typeof value.accountType === "string" ? value.accountType : "other") as BankSecret["accountType"],
       };
     case "note":

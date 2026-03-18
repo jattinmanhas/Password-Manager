@@ -1,16 +1,14 @@
-import { CreditCard, Eye, EyeOff, Landmark, Lock, StickyNote } from "lucide-react";
-import { useState } from "react";
+import { CreditCard, Landmark, Lock, StickyNote } from "lucide-react";
 import type { VaultViewItem } from "../vault.types";
 
 interface VaultItemRowProps {
   item: VaultViewItem;
+  onView: () => void;
   onEdit: () => void;
   onDelete: () => void;
 }
 
-export function VaultItemRow({ item, onEdit, onDelete }: VaultItemRowProps) {
-  const [showPassword, setShowPassword] = useState(false);
-
+export function VaultItemRow({ item, onView, onEdit, onDelete }: VaultItemRowProps) {
   if (item.isCorrupted || !item.secret) {
     return (
       <div
@@ -54,25 +52,19 @@ export function VaultItemRow({ item, onEdit, onDelete }: VaultItemRowProps) {
 
   let Icon = Lock;
   let subtitle = "";
-  let sensitiveValue = "";
 
   if (kind === "login") {
     Icon = Lock;
     subtitle = (secret as any).username;
-    sensitiveValue = (secret as any).password;
   } else if (kind === "card") {
     Icon = CreditCard;
-    const cardNum = (secret as any).cardNumber || "";
     subtitle = (secret as any).cardholderName || "Payment Card";
-    sensitiveValue = cardNum ? `•••• ${cardNum.slice(-4)}` : "Card Details";
   } else if (kind === "bank") {
     Icon = Landmark;
     subtitle = (secret as any).bankName || "Bank Account";
-    sensitiveValue = (secret as any).accountNumber ? `Acc: ••••${(secret as any).accountNumber.slice(-4)}` : "Account Details";
   } else if (kind === "note") {
     Icon = StickyNote;
     subtitle = "Secure Note";
-    sensitiveValue = "Click to view notes";
   }
 
   return (
@@ -135,21 +127,6 @@ export function VaultItemRow({ item, onEdit, onDelete }: VaultItemRowProps) {
               {subtitle}
             </p>
           )}
-          {subtitle && sensitiveValue && <span style={{ color: "var(--color-border)", fontSize: "0.75rem" }}>•</span>}
-          <p
-            style={{
-              fontFamily: "monospace",
-              fontSize: "0.8125rem",
-              color: "var(--color-text-main)",
-              letterSpacing: (kind === "login" && !showPassword) ? "0.08em" : "0",
-              margin: 0,
-            }}
-          >
-            {kind === "login" 
-              ? (showPassword ? sensitiveValue : "•".repeat(Math.min(sensitiveValue.length, 12)))
-              : (sensitiveValue)
-            }
-          </p>
         </div>
         
         {/* Tags */}
@@ -181,18 +158,17 @@ export function VaultItemRow({ item, onEdit, onDelete }: VaultItemRowProps) {
       <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", flexShrink: 0 }}>
         <button
           type="button"
-          onClick={() => setShowPassword((p) => !p)}
-          title={showPassword ? "Hide password" : "Show password"}
+          onClick={onView}
           style={{
-            color: "var(--color-text-light)",
+            fontSize: "0.8125rem",
+            fontWeight: 600,
+            color: "var(--color-security-blue)",
             background: "none",
             border: "none",
             cursor: "pointer",
-            display: "flex",
-            alignItems: "center",
           }}
         >
-          {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+          View
         </button>
         <button
           type="button"
@@ -233,6 +209,7 @@ interface VaultItemsListProps {
   items: VaultViewItem[];
   loading: boolean;
   onRefresh: () => void;
+  onView: (item: VaultViewItem) => void;
   onEdit: (item: VaultViewItem) => void;
   onDelete: (item: VaultViewItem) => void;
 }
@@ -241,6 +218,7 @@ export function VaultItemsList({
   items,
   loading,
   onRefresh,
+  onView,
   onEdit,
   onDelete,
 }: VaultItemsListProps) {
@@ -330,6 +308,7 @@ export function VaultItemsList({
             <VaultItemRow
               key={item.id}
               item={item}
+              onView={() => onView(item)}
               onEdit={() => onEdit(item)}
               onDelete={() => onDelete(item)}
             />

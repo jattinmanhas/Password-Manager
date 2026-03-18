@@ -1,26 +1,34 @@
 import { FolderLock, X } from "lucide-react";
-import { type FormEvent } from "react";
+import { type FormEvent, useEffect } from "react";
+import { useForm } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
+import { vaultModalSchema, type VaultModalFormData } from "../../../lib/validations/vault";
 
 import { Label } from "../../../components/ui/Label";
 import { Input } from "../../../components/ui/Input";
 import { Button } from "../../../components/ui/Button";
 import type { VaultType } from "../vault.types";
 
-interface VaultFormData {
-  name: string;
-  type: VaultType;
-  members: string;
-}
-
 interface VaultModalProps {
   mode: "create" | "edit";
-  form: VaultFormData;
-  onFormChange: (form: VaultFormData) => void;
-  onSubmit: (e: FormEvent) => void;
+  initialData?: VaultModalFormData;
+  onSubmit: (data: VaultModalFormData) => void;
   onClose: () => void;
 }
 
-export function VaultModal({ mode, form, onFormChange, onSubmit, onClose }: VaultModalProps) {
+export function VaultModal({ mode, initialData, onSubmit, onClose }: VaultModalProps) {
+  const modalForm = useForm<VaultModalFormData>({
+    resolver: zodResolver(vaultModalSchema),
+    defaultValues: initialData || { name: "", type: "personal", members: "" }
+  });
+
+  useEffect(() => {
+    if (initialData) {
+      modalForm.reset(initialData);
+    }
+  }, [initialData, modalForm]);
+
+  const watchType = modalForm.watch("type");
   return (
     <div
       className="dialog-overlay"
@@ -83,16 +91,15 @@ export function VaultModal({ mode, form, onFormChange, onSubmit, onClose }: Vaul
         </div>
 
         {/* Form */}
-        <form className="form-stack" style={{ marginTop: "1.5rem" }} onSubmit={onSubmit}>
+        <form className="form-stack" style={{ marginTop: "1.5rem" }} onSubmit={modalForm.handleSubmit(onSubmit)}>
           <div className="form-group">
             <Label htmlFor="vault-name">Vault Name</Label>
             <Input
               id="vault-name"
               type="text"
               placeholder="e.g. Work Passwords"
-              value={form.name}
-              onChange={(e) => onFormChange({ ...form, name: e.target.value })}
-              required
+              {...modalForm.register("name")}
+              error={modalForm.formState.errors.name?.message}
             />
           </div>
 
@@ -100,24 +107,23 @@ export function VaultModal({ mode, form, onFormChange, onSubmit, onClose }: Vaul
             <Label htmlFor="vault-type">Vault Type</Label>
             <select
               id="vault-type"
-              value={form.type}
-              onChange={(e) => onFormChange({ ...form, type: e.target.value as VaultType })}
               className="input"
+              {...modalForm.register("type")}
             >
               <option value="personal">Personal — only you</option>
               <option value="shared">Shared — with others</option>
             </select>
           </div>
 
-          {form.type === "shared" && (
+          {watchType === "shared" && (
             <div className="form-group">
               <Label htmlFor="vault-members">Members</Label>
               <Input
                 id="vault-members"
                 type="text"
-                value={form.members}
-                onChange={(e) => onFormChange({ ...form, members: e.target.value })}
                 placeholder="Alex, Sam, Jordan (comma-separated)"
+                {...modalForm.register("members")}
+                error={modalForm.formState.errors.members?.message}
               />
             </div>
           )}

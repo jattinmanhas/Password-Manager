@@ -77,6 +77,13 @@ async function wrapKekForRecovery(
         kekSalt: toBase64(salt),
     };
 }
+const Wrapper = ({ children }: { children: React.ReactNode }) => (
+    <div style={{ display: "flex", alignItems: "center", justifyContent: "center", minHeight: "calc(100vh - 8rem)", padding: "1rem" }}>
+        <div style={{ width: "100%", maxWidth: "32rem" }}>
+            {children}
+        </div>
+    </div>
+);
 
 export function RecoverySetup() {
     const [recoveryKey, setRecoveryKey] = useState<string | null>(null);
@@ -232,18 +239,21 @@ export function RecoverySetup() {
 
     if (isLoadingStatus) {
         return (
-            <Card>
+            <Wrapper>
+                <Card>
                 <div style={{ textAlign: "center", padding: "2rem" }}>
                     <div className="loading-spinner" style={{ margin: "0 auto 1rem auto", color: "var(--color-security-blue)" }}></div>
                     <p className="card-desc" style={{ marginBottom: 0 }}>Checking recovery status...</p>
                 </div>
             </Card>
+            </Wrapper>
         );
     }
 
     if (confirmed) {
         return (
-            <Card>
+            <Wrapper>
+                <Card>
                 <div style={{ textAlign: "center", padding: "1rem 0" }}>
                     <ShieldCheck
                         size={48}
@@ -256,11 +266,13 @@ export function RecoverySetup() {
                     </p>
                 </div>
             </Card>
+            </Wrapper>
         );
     }
 
     return (
-        <Card>
+        <Wrapper>
+            <Card>
             <div style={{ marginBottom: "1.5rem" }}>
                 <h2 className="card-title">Set Up Account Recovery</h2>
                 <p className="card-desc" style={{ marginBottom: 0 }}>
@@ -399,5 +411,6 @@ export function RecoverySetup() {
                 </div>
             )}
         </Card>
+        </Wrapper>
     );
 }

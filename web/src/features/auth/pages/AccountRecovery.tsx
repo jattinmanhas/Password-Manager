@@ -2,7 +2,11 @@ import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { Eye, EyeOff, KeyRound } from "lucide-react";
 import toast from "react-hot-toast";
+import { useForm, Controller } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
+import { z } from "zod";
 
+import { accountRecoverySchema, totpSetupSchema, type TotpSetupFormData } from "../../../lib/validations/auth";
 import { useAuth } from "../../../app/providers/AuthProvider";
 import { Card } from "../../../components/ui/Card";
 import { Button } from "../../../components/ui/Button";
@@ -39,71 +43,113 @@ function parseVaultMetadata(metadata: unknown): Record<string, unknown> {
     return metadata as Record<string, unknown>;
 }
 
+const verifySchema = accountRecoverySchema.extend({
+    email: z.string().min(1, "Email is required").email("Invalid email format"),
+});
+type VerifyFormData = z.infer<typeof verifySchema>;
+
+const resetPasswordSchema = z.object({
+    newPassword: z.string().min(8, "Password must be at least 8 characters long"),
+    confirmPassword: z.string().min(1, "Please confirm your password")
+}).refine(data => data.newPassword === data.confirmPassword, {
+    message: "Passwords do not match",
+    path: ["confirmPassword"]
+});
+type ResetPasswordFormData = z.infer<typeof resetPasswordSchema>;
+
 export function AccountRecovery() {
     const navigate = useNavigate();
     const { setSessionRaw } = useAuth();
 
     const [step, setStep] = useState<Step>("verify");
-    const [email, setEmail] = useState("");
-    const [recoveryKey, setRecoveryKey] = useState("");
-    const [totpCode, setTotpCode] = useState("");
     const [recoveryToken, setRecoveryToken] = useState("");
     const [verifyResponse, setVerifyResponse] = useState<RecoveryVerifyResponse | null>(null);
 
-    const [newPassword, setNewPassword] = useState("");
-    const [confirmPassword, setConfirmPassword] = useState("");
-    const [showPassword, setShowPassword] = useState(false);
+    const verifyForm = useForm<VerifyFormData>({
+        resolver: zodResolver(verifySchema),
+        defaultValues: { email: "", recoveryKey: "" }
+    });
 
-    const [error, setError] = useState("");
+    const totpForm = useForm<TotpSetupFormData>({
+        resolver: zodResolver(totpSetupSchema),
+        defaultValues: { code: "" }
+    });
+
+    const resetForm = useForm<ResetPasswordFormData>({
+        resolver: zodResolver(resetPasswordSchema),
+        defaultValues: { newPassword: "", confirmPassword: "" }
+    });
+
+    const [showPassword, setShowPassword] = useState(false);
+    const [apiError, setApiError] = useState("");
     const [loading, setLoading] = useState(false);
 
-    const handleVerify = async (e: React.FormEvent) => {
-        e.preventDefault();
-        setError("");
+    const onVerifySubmit = async (data: VerifyFormData) => {
+        setApiError("");
         setLoading(true);
 
         try {
             const resp = await authService.verifyRecovery({
-                email,
-                recovery_key: recoveryKey,
-                totp_code: totpCode || undefined,
+                email: data.email,
+                recovery_key: data.recoveryKey,
+                totp_code: undefined,
             });
             setRecoveryToken(resp.recovery_token);
             setVerifyResponse(resp);
             setStep("reset");
             toast.success("Identity verified! Set your new password.");
         } catch (err) {
-            if (err instanceof ApiError) {
-                if (err.code === "mfa_required") {
-                    setStep("totp");
-                    setError("");
-                } else {
-                    setError(err.message);
-                }
-            } else if (err instanceof Error) {
-                setError(err.message);
-            } else {
-                setError("Recovery verification failed");
-            }
+            handleVerifyError(err);
         } finally {
             setLoading(false);
         }
     };
 
-    const handleReset = async (e: React.FormEvent) => {
-        e.preventDefault();
-        setError("");
-
-        if (newPassword !== confirmPassword) {
-            setError("Passwords do not match");
-            return;
-        }
-
+    const onTotpSubmit = async (data: TotpSetupFormData) => {
+        setApiError("");
         setLoading(true);
+
+        try {
+            const verifyData = verifyForm.getValues();
+            const resp = await authService.verifyRecovery({
+                email: verifyData.email,
+                recovery_key: verifyData.recoveryKey,
+                totp_code: data.code,
+            });
+            setRecoveryToken(resp.recovery_token);
+            setVerifyResponse(resp);
+            setStep("reset");
+            toast.success("Identity verified! Set your new password.");
+        } catch (err) {
+            handleVerifyError(err);
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    const handleVerifyError = (err: unknown) => {
+        if (err instanceof ApiError) {
+            if (err.code === "mfa_required") {
+                setStep("totp");
+                setApiError("");
+            } else {
+                setApiError(err.message);
+            }
+        } else if (err instanceof Error) {
+            setApiError(err.message);
+        } else {
+            setApiError("Recovery verification failed");
+        }
+    };
+
+    const onResetSubmit = async (data: ResetPasswordFormData) => {
+        setApiError("");
+        setLoading(true);
+
         try {
             const res = await authService.resetPassword({
                 recovery_token: recoveryToken,
-                new_password: newPassword,
+                new_password: data.newPassword,
             });
 
             // Update local session so vault re-encryption is authenticated
@@ -120,8 +166,8 @@ export function AccountRecovery() {
             if (verifyResponse?.wrapped_kek && verifyResponse.wrap_nonce && verifyResponse.kek_salt) {
                 try {
                     await reEncryptVaultForNewPassword(
-                        recoveryKey,
-                        newPassword,
+                        verifyForm.getValues("recoveryKey"),
+                        data.newPassword,
                         verifyResponse.wrapped_kek,
                         verifyResponse.wrap_nonce,
                         verifyResponse.kek_salt,
@@ -139,11 +185,11 @@ export function AccountRecovery() {
             toast.success("Password reset successful!");
         } catch (err) {
             if (err instanceof ApiError) {
-                setError(err.message);
+                setApiError(err.message);
             } else if (err instanceof Error) {
-                setError(err.message);
+                setApiError(err.message);
             } else {
-                setError("Failed to reset password");
+                setApiError("Failed to reset password");
             }
         } finally {
             setLoading(false);
@@ -199,9 +245,9 @@ export function AccountRecovery() {
                     </div>
                 )}
 
-                {error && <div className="alert-error">{error}</div>}
+                {apiError && <div className="alert-error">{apiError}</div>}
 
-                <form onSubmit={handleReset} className="form-stack">
+                <form onSubmit={resetForm.handleSubmit(onResetSubmit)} className="form-stack">
                     <div className="form-group">
                         <Label htmlFor="new-password">New Password</Label>
                         <div className="input-wrapper">
@@ -209,10 +255,8 @@ export function AccountRecovery() {
                                 id="new-password"
                                 type={showPassword ? "text" : "password"}
                                 autoComplete="new-password"
-                                required
-                                value={newPassword}
-                                onChange={(e) => setNewPassword(e.target.value)}
-                                error={!!error}
+                                {...resetForm.register("newPassword")}
+                                error={resetForm.formState.errors.newPassword?.message}
                             />
                             <button
                                 type="button"
@@ -222,7 +266,7 @@ export function AccountRecovery() {
                                 {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
                             </button>
                         </div>
-                        {newPassword && <PasswordStrengthMeter password={newPassword} />}
+                        <PasswordStrengthMeter password={resetForm.watch("newPassword") || ""} />
                     </div>
 
                     <div className="form-group">
@@ -231,10 +275,8 @@ export function AccountRecovery() {
                             id="confirm-password"
                             type={showPassword ? "text" : "password"}
                             autoComplete="new-password"
-                            required
-                            value={confirmPassword}
-                            onChange={(e) => setConfirmPassword(e.target.value)}
-                            error={confirmPassword !== "" && confirmPassword !== newPassword}
+                            {...resetForm.register("confirmPassword")}
+                            error={resetForm.formState.errors.confirmPassword?.message}
                         />
                     </div>
 
@@ -257,78 +299,83 @@ export function AccountRecovery() {
                 </p>
             </div>
 
-            {error && <div className="alert-error">{error}</div>}
+            {apiError && <div className="alert-error">{apiError}</div>}
 
-            <form onSubmit={handleVerify} className="form-stack">
-                {step === "verify" && (
-                    <>
-                        <div className="form-group">
-                            <Label htmlFor="recovery-email">Email</Label>
-                            <Input
-                                id="recovery-email"
-                                type="email"
-                                placeholder="name@example.com"
-                                autoComplete="email"
-                                required
-                                value={email}
-                                onChange={(e) => setEmail(e.target.value)}
-                                error={!!error}
-                            />
-                        </div>
-
-                        <div className="form-group">
-                            <Label htmlFor="recovery-key">Recovery Key</Label>
-                            <Input
-                                id="recovery-key"
-                                type="text"
-                                placeholder="XXXXX-XXXXX-XXXXX-XXXXX-XXXXX-XXXXX-XXXXX-XXXXX"
-                                autoComplete="off"
-                                required
-                                value={recoveryKey}
-                                onChange={(e) => setRecoveryKey(e.target.value)}
-                                error={!!error}
-                                style={{ fontFamily: "monospace", letterSpacing: "0.05em" }}
-                            />
-                        </div>
-                    </>
-                )}
-
-                {step === "totp" && (
+            {step === "verify" && (
+                <form onSubmit={verifyForm.handleSubmit(onVerifySubmit)} className="form-stack">
                     <div className="form-group">
-                        <Label htmlFor="totp-code">Authentication Code</Label>
+                        <Label htmlFor="recovery-email">Email</Label>
                         <Input
-                            id="totp-code"
-                            type="text"
-                            autoComplete="one-time-code"
-                            required
-                            value={totpCode}
-                            onChange={(e) => setTotpCode(e.target.value)}
-                            placeholder="000000"
-                            error={!!error}
+                            id="recovery-email"
+                            type="email"
+                            placeholder="name@example.com"
+                            autoComplete="email"
+                            {...verifyForm.register("email")}
+                            error={verifyForm.formState.errors.email?.message}
                         />
                     </div>
-                )}
 
-                <Button type="submit" isLoading={loading}>
-                    {step === "totp" ? "Verify & Continue" : "Verify Recovery Key"}
-                </Button>
+                    <div className="form-group">
+                        <Label htmlFor="recovery-key">Recovery Key</Label>
+                        <Input
+                            id="recovery-key"
+                            type="text"
+                            placeholder="XXXXX-XXXXX-XXXXX-XXXXX-XXXXX-XXXXX-XXXXX-XXXXX"
+                            autoComplete="off"
+                            {...verifyForm.register("recoveryKey")}
+                            error={verifyForm.formState.errors.recoveryKey?.message}
+                            style={{ fontFamily: "monospace", letterSpacing: "0.05em" }}
+                        />
+                    </div>
 
-                {step === "totp" && (
+                    <Button type="submit" isLoading={loading}>
+                        Verify Recovery Key
+                    </Button>
+                </form>
+            )}
+
+            {step === "totp" && (
+                <form onSubmit={totpForm.handleSubmit(onTotpSubmit)} className="form-stack">
+                    <div className="form-group">
+                        <Label htmlFor="totp-code">Authentication Code</Label>
+                        <Controller
+                            name="code"
+                            control={totpForm.control}
+                            render={({ field }) => (
+                                <Input
+                                    id="totp-code"
+                                    type="text"
+                                    autoComplete="one-time-code"
+                                    maxLength={6}
+                                    {...field}
+                                    onChange={(e) => field.onChange(e.target.value.replace(/\D/g, ''))}
+                                    placeholder="000000"
+                                    disabled={loading}
+                                    error={totpForm.formState.errors.code?.message}
+                                />
+                            )}
+                        />
+                    </div>
+                    
+                    <Button type="submit" isLoading={loading}>
+                        Verify & Continue
+                    </Button>
+
                     <div style={{ textAlign: "center", marginTop: "0.5rem" }}>
                         <button
                             type="button"
                             style={{ fontSize: "0.75rem", fontWeight: 500, color: "var(--color-text-subtle)" }}
                             onClick={() => {
                                 setStep("verify");
-                                setTotpCode("");
-                                setError("");
+                                totpForm.reset();
+                                setApiError("");
                             }}
                         >
                             Back
                         </button>
                     </div>
-                )}
-            </form>
+                </form>
+            )}
 
             <div style={{ marginTop: "1.5rem", textAlign: "center", fontSize: "0.875rem" }}>
                 <span style={{ color: "var(--color-text-subtle)" }}>Remember your password? </span>

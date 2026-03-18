@@ -3,6 +3,7 @@ import type { VaultCardModel, VaultFolder } from "../vault.types";
 
 interface VaultSidebarProps {
   vaults: VaultCardModel[];
+  isMobile?: boolean;
   activeVaultId: string;
   onSelectVault: (id: string) => void;
   onCreateFolder: () => void;
@@ -12,6 +13,7 @@ interface VaultSidebarProps {
 
 export function VaultSidebar({
   vaults,
+  isMobile,
   activeVaultId,
   onSelectVault,
   onCreateFolder,
@@ -21,10 +23,11 @@ export function VaultSidebar({
   return (
     <div
       style={{
-        width: "18rem",
+        width: isMobile ? "100%" : "16rem",
         backgroundColor: "var(--color-white)",
-        borderRight: "1px solid var(--color-border)",
-        height: "100%",
+        borderRight: isMobile ? "none" : "1px solid var(--color-border)",
+        borderBottom: isMobile ? "1px solid var(--color-border)" : "none",
+        height: isMobile ? "auto" : "100%",
         display: "flex",
         flexDirection: "column",
         flexShrink: 0,
@@ -65,7 +68,13 @@ export function VaultSidebar({
           </button>
         </h3>
 
-        <div style={{ display: "flex", flexDirection: "column", gap: "0.25rem" }}>
+        <div style={{ 
+          display: "flex", 
+          flexDirection: isMobile ? "row" : "column", 
+          gap: "0.5rem",
+          overflowX: isMobile ? "auto" : "visible",
+          paddingBottom: isMobile ? "0.5rem" : "0"
+        }}>
           {vaults.map((vault) => {
             const isActive = vault.id === activeVaultId;
             return (
@@ -82,6 +91,7 @@ export function VaultSidebar({
                   cursor: "pointer",
                   transition: "all 0.15s ease",
                   position: "relative",
+                  flexShrink: isMobile ? 0 : 1,
                 }}
                 onClick={() => onSelectVault(vault.id)}
               >
@@ -146,13 +156,6 @@ export function VaultSidebar({
             );
           })}
         </div>
-      </div>
-
-      <div style={{ marginTop: "auto", padding: "1.5rem", borderTop: "1px solid var(--color-border)" }}>
-         <div style={{ display: "flex", alignItems: "center", gap: "0.75rem", color: "var(--color-text-subtle)", fontSize: "0.875rem" }}>
-           <Tag size={16} />
-           <span>Tags System Enabled</span>
-         </div>
       </div>
       
       <style>{`

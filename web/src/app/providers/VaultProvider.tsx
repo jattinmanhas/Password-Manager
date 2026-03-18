@@ -11,6 +11,8 @@ interface VaultSessionState {
   isKekVerified: boolean;
   verifierItem: VaultItemResponse | null;
   items: VaultViewItem[];
+  userPublicKey: Uint8Array | null;
+  userPrivateKey: Uint8Array | null;
   setAead: (aead: XChaCha20Poly1305Aead | null) => void;
   setVaultSession: (
     kek: Uint8Array,
@@ -18,6 +20,7 @@ interface VaultSessionState {
     isKekVerified?: boolean
   ) => void;
   setItems: (items: VaultViewItem[]) => void;
+  setUserKeyPair: (publicKey: Uint8Array, privateKey: Uint8Array) => void;
   lockVault: () => void;
 }
 
@@ -29,6 +32,8 @@ export function VaultProvider({ children }: { children: ReactNode }) {
   const [isKekVerified, setIsKekVerified] = useState(false);
   const [verifierItem, setVerifierItem] = useState<VaultItemResponse | null>(null);
   const [items, setItems] = useState<VaultViewItem[]>([]);
+  const [userPublicKey, setUserPublicKey] = useState<Uint8Array | null>(null);
+  const [userPrivateKey, setUserPrivateKey] = useState<Uint8Array | null>(null);
 
   // Initialize vault encryption adapter once
   useEffect(() => {
@@ -54,6 +59,14 @@ export function VaultProvider({ children }: { children: ReactNode }) {
     []
   );
 
+  const setUserKeyPair = useCallback(
+    (publicKey: Uint8Array, privateKey: Uint8Array) => {
+      setUserPublicKey(publicKey);
+      setUserPrivateKey(privateKey);
+    },
+    []
+  );
+
   const lockVault = useCallback(() => {
     setKek((prev) => {
       wipeKeyMaterial(prev);
@@ -62,6 +75,11 @@ export function VaultProvider({ children }: { children: ReactNode }) {
     setIsKekVerified(false);
     setVerifierItem(null);
     setItems([]);
+    setUserPrivateKey((prev) => {
+      wipeKeyMaterial(prev);
+      return null;
+    });
+    setUserPublicKey(null);
   }, []);
 
   return (
@@ -72,9 +90,12 @@ export function VaultProvider({ children }: { children: ReactNode }) {
         isKekVerified,
         verifierItem,
         items,
+        userPublicKey,
+        userPrivateKey,
         setAead,
         setVaultSession,
         setItems,
+        setUserKeyPair,
         lockVault,
       }}
     >
@@ -90,3 +111,4 @@ export function useVaultSession() {
   }
   return context;
 }
+

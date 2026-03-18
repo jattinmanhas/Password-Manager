@@ -1,8 +1,12 @@
 import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { Eye, EyeOff } from "lucide-react";
+import { useForm } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
 import { useAuth } from "../../../app/providers/AuthProvider";
 import { ApiError } from "../services/auth.service";
+import { loginSchema, type LoginFormData, totpSetupSchema } from "../../../lib/validations/auth";
+import { z } from "zod";
 import { Button } from "../../../components/ui/Button";
 import { Input } from "../../../components/ui/Input";
 import { Label } from "../../../components/ui/Label";
@@ -13,44 +17,77 @@ export function Login() {
     const { login } = useAuth();
     const navigate = useNavigate();
 
-    const [email, setEmail] = useState("");
-    const [password, setPassword] = useState("");
-    const [showPassword, setShowPassword] = useState(false);
+    const loginForm = useForm<LoginFormData>({
+        resolver: zodResolver(loginSchema),
+        defaultValues: { email: "", password: "" }
+    });
 
+    const [showPassword, setShowPassword] = useState(false);
     const [mfaStep, setMfaStep] = useState(false);
     const [mfaType, setMfaType] = useState<"totp" | "recovery">("totp");
-    const [mfaCode, setMfaCode] = useState("");
+    
+    // Quick resolver for MFA depending on type
+    const mfaSchema = z.object({
+        code: mfaType === "totp" 
+            ? z.string().length(6, "Code must be 6 digits").regex(/^\d+$/, "Code must be numeric")
+            : z.string().min(1, "Recovery code is required")
+    });
 
-    const [error, setError] = useState("");
+    const mfaForm = useForm<{ code: string }>({
+        resolver: zodResolver(mfaSchema),
+        defaultValues: { code: "" }
+    });
+
+    const [apiError, setApiError] = useState("");
     const [loading, setLoading] = useState(false);
 
-    const handleSubmit = async (e: React.FormEvent) => {
-        e.preventDefault();
-        setError("");
+    const onLoginSubmit = async (data: LoginFormData) => {
+        setApiError("");
         setLoading(true);
 
         try {
             await login({
-                email,
-                password,
+                email: data.email,
+                password: data.password,
                 device_name: guessDeviceName(),
-                ...(mfaStep && {
-                    [mfaType === "totp" ? "totp_code" : "recovery_code"]: mfaCode,
-                }),
             });
             navigate("/", { replace: true });
         } catch (err) {
-            if (err instanceof ApiError && err.code === "mfa_required") {
-                setMfaStep(true);
-            } else if (err instanceof ApiError) {
-                setError(err.message);
-            } else if (err instanceof Error) {
-                setError(err.message);
-            } else {
-                setError("An unexpected error occurred.");
-            }
+            handleLoginError(err);
         } finally {
             setLoading(false);
+        }
+    };
+
+    const onMfaSubmit = async (data: { code: string }) => {
+        setApiError("");
+        setLoading(true);
+
+        try {
+            const loginData = loginForm.getValues();
+            await login({
+                email: loginData.email,
+                password: loginData.password,
+                device_name: guessDeviceName(),
+                [mfaType === "totp" ? "totp_code" : "recovery_code"]: data.code,
+            });
+            navigate("/", { replace: true });
+        } catch (err) {
+            handleLoginError(err);
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    const handleLoginError = (err: unknown) => {
+        if (err instanceof ApiError && err.code === "mfa_required") {
+            setMfaStep(true);
+        } else if (err instanceof ApiError) {
+            setApiError(err.message);
+        } else if (err instanceof Error) {
+            setApiError(err.message);
+        } else {
+            setApiError("An unexpected error occurred.");
         }
     };
 
@@ -64,19 +101,17 @@ export function Login() {
                     </p>
                 </div>
 
-                {error && <div className="alert-error">{error}</div>}
+                {apiError && <div className="alert-error">{apiError}</div>}
 
-                <form onSubmit={handleSubmit} className="form-stack">
+                <form onSubmit={mfaForm.handleSubmit(onMfaSubmit)} className="form-stack">
                     <div className="form-group">
                         <Label htmlFor="code">{mfaType === "totp" ? "Authentication Code" : "Recovery Code"}</Label>
                         <Input
                             id="code"
                             type="text"
                             autoComplete="one-time-code"
-                            required
-                            value={mfaCode}
-                            onChange={(e) => setMfaCode(e.target.value)}
-                            error={!!error}
+                            {...mfaForm.register("code")}
+                            error={mfaForm.formState.errors.code?.message || (!!apiError ? apiError : false)}
                             placeholder={mfaType === "totp" ? "000000" : ""}
                         />
                     </div>
@@ -89,7 +124,11 @@ export function Login() {
                         <button
                             type="button"
                             style={{ fontSize: "0.875rem", fontWeight: 500, color: "var(--color-security-blue)" }}
-                            onClick={() => setMfaType(mfaType === "totp" ? "recovery" : "totp")}
+                            onClick={() => {
+                                setMfaType(mfaType === "totp" ? "recovery" : "totp");
+                                mfaForm.reset();
+                                setApiError("");
+                            }}
                         >
                             Use a {mfaType === "totp" ? "recovery code" : "authenticator app"} instead
                         </button>
@@ -100,8 +139,8 @@ export function Login() {
                             style={{ fontSize: "0.75rem", fontWeight: 500, color: "var(--color-text-subtle)" }}
                             onClick={() => {
                                 setMfaStep(false);
-                                setMfaCode("");
-                                setError("");
+                                mfaForm.reset();
+                                setApiError("");
                             }}
                         >
                             Back to login
@@ -119,9 +158,9 @@ export function Login() {
                 <p className="card-desc" style={{ marginBottom: 0 }}>Enter your credentials to access your vault</p>
             </div>
 
-            {error && <div className="alert-error">{error}</div>}
+            {apiError && <div className="alert-error">{apiError}</div>}
 
-            <form onSubmit={handleSubmit} className="form-stack">
+            <form onSubmit={loginForm.handleSubmit(onLoginSubmit)} className="form-stack">
                 <div className="form-group">
                     <Label htmlFor="email">Email</Label>
                     <Input
@@ -129,10 +168,8 @@ export function Login() {
                         type="email"
                         placeholder="name@example.com"
                         autoComplete="email"
-                        required
-                        value={email}
-                        onChange={(e) => setEmail(e.target.value)}
-                        error={!!error}
+                        {...loginForm.register("email")}
+                        error={loginForm.formState.errors.email?.message}
                     />
                 </div>
 
@@ -148,10 +185,8 @@ export function Login() {
                             id="password"
                             type={showPassword ? "text" : "password"}
                             autoComplete="current-password"
-                            required
-                            value={password}
-                            onChange={(e) => setPassword(e.target.value)}
-                            error={!!error}
+                            {...loginForm.register("password")}
+                            error={loginForm.formState.errors.password?.message}
                         />
                         <button
                             type="button"

@@ -10,10 +10,15 @@ import {
   encryptVaultItem,
   fromBase64,
   toBase64,
+  utf8ToBytes,
+  bytesToUtf8,
+  randomBytes,
 } from "../../../crypto";
 import { createDefaultArgon2idKdf } from "../../../crypto/adapters";
 import type { XChaCha20Poly1305Aead } from "../../../crypto";
+import { generateX25519KeyPair, encryptPrivateKey, decryptPrivateKey } from "../../../crypto/sharing";
 import { vaultService } from "../services/vault.service";
+import { sharingService } from "../services/sharing.service";
 import type { FolderResponse, FoldersResponse, VaultItemResponse } from "../types";
 
 import {
@@ -49,12 +54,14 @@ import { VaultSidebar } from "../components/VaultSidebar";
 import { VaultItemForm } from "../components/VaultItemForm";
 import { VaultItemsList } from "../components/VaultItemsList";
 import { VaultModal } from "../components/VaultModal";
+import { VaultItemViewModal } from "../components/VaultItemViewModal";
+import { ShareItemModal } from "../components/ShareItemModal";
 import { Search, Plus, SlidersHorizontal } from "lucide-react";
 import { Input } from "../../../components/ui/Input";
 import { Button } from "../../../components/ui/Button";
 import { Select } from "../../../components/ui/Select";
 
-type VaultFormData = { name: string; type: VaultType; members: string };
+import type { VaultModalFormData, VaultUnlockFormData, VaultItemFormData } from "../../../lib/validations/vault";
 
 export function Vault() {
   const { session } = useAuth();
@@ -67,13 +74,15 @@ export function Vault() {
     isKekVerified,
     verifierItem,
     items,
+    userPublicKey,
+    userPrivateKey,
     setVaultSession,
     setItems,
+    setUserKeyPair,
     lockVault: contextLockVault,
   } = useVaultSession();
 
   // ── Unlock form ────────────────────────────────────────────────────────────
-  const [masterPassword, setMasterPassword] = useState("");
   const [unlocking, setUnlocking] = useState(false);
 
   // ── Items UI State ─────────────────────────────────────────────────────────
@@ -90,10 +99,12 @@ export function Vault() {
   const [saving, setSaving] = useState(false);
   const [editingItemId, setEditingItemId] = useState<string | null>(null);
   const [showItemModal, setShowItemModal] = useState(false);
+  const [viewingItem, setViewingItem] = useState<VaultViewItem | null>(null);
   const [itemFolderId, setItemFolderId] = useState<string | undefined>();
+  const [sharingItem, setSharingItem] = useState<VaultViewItem | null>(null);
 
   // ── Vault directory ────────────────────────────────────────────────────────
-  const [vaultFilter, setVaultFilter] = useState<VaultFilter>("all");
+  const [vaultFilter, setVaultFilter] = useState<string>("all");
   const [vaultQuery, setVaultQuery] = useState("");
   const [activeVaultId, setActiveVaultId] = useState(DEFAULT_PERSONAL_VAULT_ID);
   const [vaultDirectory, setVaultDirectory] = useState<VaultDirectoryEntry[]>([]);
@@ -101,8 +112,15 @@ export function Vault() {
   // ── Vault modal ────────────────────────────────────────────────────────────
   const [showVaultModal, setShowVaultModal] = useState(false);
   const [vaultModalMode, setVaultModalMode] = useState<"create" | "edit">("create");
-  const [vaultForm, setVaultForm] = useState<VaultFormData>({ name: "", type: "personal", members: "" });
+  const [vaultFormInitial, setVaultFormInitial] = useState<VaultModalFormData>({ name: "", type: "personal", members: "" });
   const [editingVaultId, setEditingVaultId] = useState<string | null>(null);
+
+  const [isMobile, setIsMobile] = useState(typeof window !== 'undefined' && window.innerWidth < 768);
+  useEffect(() => {
+    const handleResize = () => setIsMobile(window.innerWidth < 768);
+    window.addEventListener("resize", handleResize);
+    return () => window.removeEventListener("resize", handleResize);
+  }, []);
 
   // ── Helpers ────────────────────────────────────────────────────────────────
 
@@ -155,17 +173,14 @@ export function Vault() {
   const decryptFolder = useCallback(
     (f: FolderResponse, key: Uint8Array, cipher: XChaCha20Poly1305Aead): VaultFolder => {
       try {
-        const name = decryptVaultItem({
-          payload: {
-            version: "xchacha20poly1305-v1",
-            nonce: f.nonce,
-            ciphertext: f.name_ciphertext,
-            wrappedDek: "", // Folders don't use DEK, encrypted with master key
-            wrapNonce: "",
-          },
-          kek: key,
-          aead: cipher,
+        const ciphertextBytes = fromBase64(f.name_ciphertext);
+        const nonceBytes = fromBase64(f.nonce);
+        const plaintext = cipher.decrypt({
+          key,
+          nonce: nonceBytes,
+          ciphertext: ciphertextBytes
         });
+        const name = bytesToUtf8(plaintext);
         return {
           id: f.id,
           name,
@@ -270,7 +285,6 @@ export function Vault() {
   useEffect(() => {
     const now = new Date().toISOString();
     const displayName = session?.name?.trim() || "You";
-    setMasterPassword("");
     setActiveVaultId(DEFAULT_PERSONAL_VAULT_ID);
     setVaultDirectory([
       { id: DEFAULT_PERSONAL_VAULT_ID, name: "Personal Vault", type: "personal", members: [displayName], updatedAt: now, isSystem: true },
@@ -347,13 +361,7 @@ export function Vault() {
     }
   }, [activeVaultId, vaults]);
 
-  const filteredVaults = useMemo(() => {
-    const q = vaultQuery.trim().toLowerCase();
-    return vaults.filter((v) => {
-      if (vaultFilter !== "all" && v.type !== vaultFilter) return false;
-      return !q || v.name.toLowerCase().includes(q);
-    });
-  }, [vaultFilter, vaultQuery, vaults]);
+  const filteredVaults = useMemo(() => vaults, [vaults]);
 
   const activeVault = useMemo(
     () => vaults.find((v) => v.id === activeVaultId) ?? vaults[0] ?? null,
@@ -377,8 +385,29 @@ export function Vault() {
       });
     }
 
+    // Filter by Item Type dropdown
+    if (vaultFilter !== "all") {
+      filtered = filtered.filter((i) => i.secret?.kind === vaultFilter);
+    }
+
+    // Filter by search query
+    const q = vaultQuery.trim().toLowerCase();
+    if (q) {
+      filtered = filtered.filter((i) => {
+        const s = i.secret;
+        if (!s) return false;
+        return (
+          s.title?.toLowerCase().includes(q) ||
+          (s as any).username?.toLowerCase().includes(q) ||
+          (s as any).notes?.toLowerCase().includes(q) ||
+          (s as any).cardholderName?.toLowerCase().includes(q) ||
+          (s as any).bankName?.toLowerCase().includes(q)
+        );
+      });
+    }
+
     return filtered;
-  }, [activeVault, items, selectedFolderId, tagFilter]);
+  }, [activeVault, items, selectedFolderId, tagFilter, vaultFilter, vaultQuery]);
 
   const corruptedCount = useMemo(
     () => visibleItems.filter((i) => i.isCorrupted).length,
@@ -387,12 +416,10 @@ export function Vault() {
 
   // ── Handlers ───────────────────────────────────────────────────────────────
 
-  const handleUnlock = async (e: FormEvent) => {
-    e.preventDefault();
+  const handleUnlock = async (data: VaultUnlockFormData) => {
     if (!session || !aead || unlocking) return;
 
-    const passwordInput = masterPassword;
-    setMasterPassword("");
+    const passwordInput = data.masterPassword;
     if (!passwordInput.trim()) { setError("Vault passphrase is required"); return; }
 
     setError("");
@@ -416,6 +443,7 @@ export function Vault() {
         setVaultSession(candidateKey, existingVerifier, true);
         candidateKey = null;
         await loadItems(derived.key, aead, allItems);
+        await bootstrapUserKeys(derived.key, aead);
         toast.success("Vault unlocked");
         return;
       }
@@ -439,6 +467,7 @@ export function Vault() {
       setVaultSession(derived.key, createdVerifier, true);
       candidateKey = null;
       await loadItems(derived.key, aead);
+      await bootstrapUserKeys(derived.key, aead);
       toast.success(encryptedDataItems.length > 0 ? "Vault unlocked and verifier secured" : "Vault unlocked");
     } catch (err) {
       wipeKeyMaterial(candidateKey);
@@ -449,21 +478,128 @@ export function Vault() {
     }
   };
 
-  const handleCreateItem = async (e: FormEvent) => {
-    e.preventDefault();
+  // ── Key pair bootstrap ─────────────────────────────────────────────────────
+  const bootstrapUserKeys = async (currentKek: Uint8Array, cipher: XChaCha20Poly1305Aead) => {
+    try {
+      const existing = await sharingService.getMyKeys();
+      if (existing.has_keys) {
+        // Decrypt existing private key
+        const encPriv = fromBase64(existing.encrypted_private_keys);
+        const nonce = fromBase64(existing.nonce);
+        const privKey = decryptPrivateKey(encPriv, nonce, currentKek, cipher);
+        const pubKey = fromBase64(existing.public_key_x25519);
+        setUserKeyPair(pubKey, privKey);
+      } else {
+        // Generate new key pair
+        const kp = await generateX25519KeyPair();
+        const { encryptedPrivateKey, nonce } = encryptPrivateKey(kp.privateKey, currentKek, cipher);
+        await sharingService.upsertUserKeys({
+          public_key_x25519: toBase64(kp.publicKey),
+          encrypted_private_keys: toBase64(encryptedPrivateKey),
+          nonce: toBase64(nonce),
+        });
+        setUserKeyPair(kp.publicKey, kp.privateKey);
+      }
+    } catch (err) {
+      console.warn("Failed to bootstrap user keys for sharing:", err);
+    }
+  };
+
+  // ── Load shared items ──────────────────────────────────────────────────────
+  const loadSharedItems = useCallback(
+    async (cipher: XChaCha20Poly1305Aead) => {
+      if (!userPrivateKey) return;
+      try {
+        const resp = await sharingService.listSharedWithMe();
+        const viewItems: VaultViewItem[] = [];
+        for (const si of resp.items) {
+          try {
+            // Unwrap the DEK using X25519 ECDH
+            const { unwrapDekFromShare } = await import("../../../crypto/sharing");
+            // We need the sender's public key — for now we use the owner's key from lookup
+            // The share was created by the item owner; we can get their public key
+            // For simplicity, we'll try looking up by shared_by_email
+            let senderPublicKey: Uint8Array;
+            try {
+              const senderKeys = await sharingService.getPublicKey(si.shared_by_email);
+              senderPublicKey = fromBase64(senderKeys.public_key_x25519);
+            } catch {
+              // Can't get sender key, item will be corrupted
+              viewItems.push({
+                id: si.id,
+                updatedAt: si.updated_at,
+                secret: null,
+                isCorrupted: true,
+                vaultId: DEFAULT_SHARED_VAULT_ID,
+                vaultName: "Shared",
+                vaultType: "shared",
+              });
+              continue;
+            }
+
+            const shareDek = await unwrapDekFromShare({
+              wrappedDek: fromBase64(si.share_wrapped_dek),
+              wrapNonce: fromBase64(si.share_wrap_nonce),
+              senderPublicKey,
+              recipientPrivateKey: userPrivateKey,
+              aead: cipher,
+            });
+
+            // Decrypt the item with the unwrapped DEK
+            const nonce = fromBase64(si.nonce);
+            const ciphertext = fromBase64(si.ciphertext);
+            const plaintext = cipher.decrypt({
+              key: shareDek,
+              nonce,
+              ciphertext,
+            });
+            const parsed = JSON.parse(new TextDecoder().decode(plaintext));
+            viewItems.push({
+              id: si.id,
+              updatedAt: si.updated_at,
+              secret: normalizeSecret(parsed),
+              isCorrupted: false,
+              vaultId: DEFAULT_SHARED_VAULT_ID,
+              vaultName: `Shared by ${si.shared_by_name || si.shared_by_email}`,
+              vaultType: "shared",
+            });
+          } catch {
+            viewItems.push({
+              id: si.id,
+              updatedAt: si.updated_at,
+              secret: null,
+              isCorrupted: true,
+              vaultId: DEFAULT_SHARED_VAULT_ID,
+              vaultName: "Shared",
+              vaultType: "shared",
+            });
+          }
+        }
+        // Merge shared items with personal items
+        setItems([...items.filter((i: VaultViewItem) => i.vaultType !== "shared"), ...viewItems]);
+      } catch (err) {
+        console.warn("Failed to load shared items:", err);
+      }
+    },
+    [userPrivateKey, setItems],
+  );
+
+  // Load shared items when keys are available
+  useEffect(() => {
+    if (aead && userPrivateKey && isKekVerified) {
+      void loadSharedItems(aead);
+    }
+  }, [aead, userPrivateKey, isKekVerified, loadSharedItems]);
+
+  const handleCreateItem = async (data: VaultItemFormData) => {
     if (!activeVault) { setError("Select a vault first"); return; }
     if (!(await ensureVerifiedWriteAccess())) return;
     if (!kek || !aead) return;
-    if (!draft.title.trim()) { setError("Title is required"); return; }
-    if (draft.kind === "login" && !(draft as any).password?.trim()) { 
-      setError("Password is required for login items"); 
-      return; 
-    }
 
     setSaving(true);
     setError("");
     try {
-      const payload = encryptVaultItem({ plaintext: JSON.stringify(draft), kek, aead });
+      const payload = encryptVaultItem({ plaintext: JSON.stringify(data), kek, aead });
       const request = {
         folder_id: itemFolderId,
         ciphertext: payload.ciphertext,
@@ -471,7 +607,7 @@ export function Vault() {
         wrapped_dek: payload.wrappedDek,
         wrap_nonce: payload.wrapNonce,
         algo_version: payload.version,
-        metadata: { kind: draft.kind, vault_id: activeVault.id, vault_name: activeVault.name, vault_type: activeVault.type },
+        metadata: { kind: data.kind, vault_id: activeVault.id, vault_name: activeVault.name, vault_type: activeVault.type },
       };
       if (editingItemId) {
         await vaultService.updateItem(editingItemId, request);
@@ -514,21 +650,21 @@ export function Vault() {
     }
   };
 
-  const handleSaveVault = (e: FormEvent) => {
-    e.preventDefault();
-    const name = vaultForm.name.trim();
+  const handleSaveVault = (data: VaultModalFormData) => {
+    const name = data.name.trim();
     if (!name) { setError("Vault name is required"); return; }
-    const members = normalizeMemberList(vaultForm.members);
+    const members = normalizeMemberList(data.members || "");
     const updatedAt = new Date().toISOString();
 
     if (vaultModalMode === "create") {
       void (async () => {
         try {
           if (!kek || !aead) return;
-          const payload = encryptVaultItem({ plaintext: name, kek, aead });
+          const nonce = randomBytes(aead.nonceLength);
+          const ciphertext = aead.encrypt({ key: kek, nonce, plaintext: utf8ToBytes(name) });
           await vaultService.createFolder({
-            name_ciphertext: payload.ciphertext,
-            nonce: payload.nonce,
+            name_ciphertext: toBase64(ciphertext),
+            nonce: toBase64(nonce),
           });
           await loadItems(kek, aead);
           toast.success("Folder created");
@@ -540,10 +676,11 @@ export function Vault() {
       void (async () => {
          try {
           if (!kek || !aead) return;
-          const payload = encryptVaultItem({ plaintext: name, kek, aead });
+          const nonce = randomBytes(aead.nonceLength);
+          const ciphertext = aead.encrypt({ key: kek, nonce, plaintext: utf8ToBytes(name) });
           await vaultService.updateFolder(editingVaultId, {
-            name_ciphertext: payload.ciphertext,
-            nonce: payload.nonce,
+            name_ciphertext: toBase64(ciphertext),
+            nonce: toBase64(nonce),
           });
           await loadItems(kek, aead);
           toast.success("Folder updated");
@@ -584,20 +721,25 @@ export function Vault() {
   const openCreateVaultModal = () => {
     setVaultModalMode("create");
     setEditingVaultId(null);
-    setVaultForm({ name: "", type: "personal", members: "" });
+    setVaultFormInitial({ name: "", type: "personal", members: "" });
     setShowVaultModal(true);
   };
 
   const openEditVaultModal = (vault: VaultCardModel) => {
     setVaultModalMode("edit");
     setEditingVaultId(vault.id);
-    setVaultForm({ name: vault.name, type: vault.type, members: vault.members.join(", ") });
+    setVaultFormInitial({ name: vault.name, type: vault.type, members: vault.members.join(", ") });
     setShowVaultModal(true);
   };
 
   const openCreateItemModal = () => {
     setEditingItemId(null);
     setDraft(DEFAULT_SECRET);
+    if (activeVault && !activeVault.isSystem) {
+      setItemFolderId(activeVault.id);
+    } else {
+      setItemFolderId(undefined);
+    }
     setError("");
     setShowItemModal(true);
   };
@@ -624,11 +766,9 @@ export function Vault() {
   if (!kek || !isKekVerified) {
     return (
       <VaultUnlockScreen
-        masterPassword={masterPassword}
         unlocking={unlocking}
         aead={aead}
         error={error}
-        onPasswordChange={setMasterPassword}
         onSubmit={handleUnlock}
       />
     );
@@ -638,6 +778,7 @@ export function Vault() {
     <div
       style={{
         display: "flex",
+        flexDirection: isMobile ? "column" : "row",
         height: "calc(100vh)",
         margin: "-2rem",
         backgroundColor: "var(--color-white)",
@@ -647,6 +788,7 @@ export function Vault() {
 
       <VaultSidebar
         vaults={vaults}
+        isMobile={isMobile}
         activeVaultId={activeVaultId}
         onSelectVault={setActiveVaultId}
         onCreateFolder={openCreateVaultModal}
@@ -679,7 +821,7 @@ export function Vault() {
           }}
         >
           <div style={{ display: "flex", alignItems: "center", gap: "1rem", flex: 1 }}>
-            <div style={{ position: "relative", flex: 1, maxWidth: "24rem" }}>
+            <div style={{ position: "relative", flex: 1, maxWidth: "100%" }}>
               <Search
                 size={16}
                 style={{
@@ -693,7 +835,7 @@ export function Vault() {
               />
               <Input
                 type="search"
-                placeholder={`Search in ${activeVault?.name}...`}
+                placeholder={`Search`}
                 value={vaultQuery}
                 onChange={(e) => setVaultQuery(e.target.value)}
                 style={{ paddingLeft: "2.5rem" }}
@@ -703,9 +845,11 @@ export function Vault() {
           <div style={{ width: "12rem" }}>
             <Select
               options={[
-                { value: "all", label: "All Items" },
-                { value: "personal", label: "Personal" },
-                { value: "shared", label: "Shared" },
+                { value: "all", label: "All Types" },
+                { value: "login", label: "Logins" },
+                { value: "card", label: "Cards" },
+                { value: "bank", label: "Banks" },
+                { value: "note", label: "Notes" },
               ]}
               value={vaultFilter}
               onChange={(val) => setVaultFilter(val as any)}
@@ -745,7 +889,7 @@ export function Vault() {
                   padding: "0.25rem 0.875rem",
                   borderRadius: "2rem",
                   border: "1px solid var(--color-border)",
-                  background: tagFilter.includes(tag) ? "var(--color-primary)" : "var(--color-white)",
+                  background: tagFilter.includes(tag) ? "var(--color-security-blue)" : "var(--color-white)",
                   color: tagFilter.includes(tag) ? "white" : "var(--color-text-main)",
                   cursor: "pointer",
                   transition: "all 0.2s",
@@ -755,8 +899,8 @@ export function Vault() {
                 {tag}
               </button>
             ))}
-            {tagFilter.length > 0 && (
-               <Button variant="ghost" onClick={() => setTagFilter([])} style={{ fontSize: "0.75rem", height: "auto", padding: "0.25rem 0.5rem" }}>
+             {tagFilter.length > 0 && (
+               <Button variant="ghost" onClick={() => setTagFilter([])} style={{ fontSize: "0.75rem", height: "auto", padding: "0.5rem 0.875rem" }}>
                  Clear
                </Button>
             )}
@@ -767,6 +911,7 @@ export function Vault() {
           items={visibleItems}
           loading={loadingItems}
           onRefresh={() => { if (aead && kek) void loadItems(kek, aead); }}
+          onView={setViewingItem}
           onEdit={startEdit}
           onDelete={(item) => void handleDelete(item)}
         />
@@ -776,12 +921,11 @@ export function Vault() {
             vaultName={activeVault?.name ?? ""}
             folders={folders}
             selectedFolderId={itemFolderId}
-            draft={draft}
+            initialData={draft}
             saving={saving}
             isEditing={!!editingItemId}
             error={error}
             corruptedCount={corruptedCount}
-            onDraftChange={setDraft}
             onFolderChange={setItemFolderId}
             onSubmit={handleCreateItem}
             onClose={cancelEdit}
@@ -792,10 +936,28 @@ export function Vault() {
         {showVaultModal && (
           <VaultModal
             mode={vaultModalMode}
-            form={vaultForm}
-            onFormChange={setVaultForm}
+            initialData={vaultFormInitial}
             onSubmit={handleSaveVault}
             onClose={() => setShowVaultModal(false)}
+          />
+        )}
+
+        {viewingItem && (
+          <VaultItemViewModal
+            item={viewingItem}
+            vaultName={activeVault?.name ?? ""}
+            onClose={() => setViewingItem(null)}
+            onShare={viewingItem.vaultType !== "shared" ? () => { setViewingItem(null); setSharingItem(viewingItem); } : undefined}
+          />
+        )}
+
+        {sharingItem && kek && aead && (
+          <ShareItemModal
+            item={sharingItem}
+            kek={kek}
+            aead={aead}
+            userPrivateKey={userPrivateKey}
+            onClose={() => setSharingItem(null)}
           />
         )}
       </div>

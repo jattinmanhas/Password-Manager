@@ -1,0 +1,93 @@
+/* Password Generator Responsive Classes */
+
+.pwd-gen-container {
+  display: grid;
+  gap: 2rem;
+  padding: 1rem;
+  border-radius: 1.5rem;
+}
+
+@media (min-width: 768px) {
+  .pwd-gen-container.standalone {
+    grid-template-columns: 1fr 1fr;
+  }
+}
+
+.pwd-gen-options {
+  display: grid;
+  gap: 1rem;
+  grid-template-columns: 1fr 1fr;
+}
+
+@media (max-width: 480px) {
+  .pwd-gen-options {
+    grid-template-columns: 1fr;
+  }
+}
+
+.pwd-gen-textarea {
+  width: 100%;
+  font-family: monospace;
+  letter-spacing: 0.05em;
+  background-color: rgba(255,255,255,0.8);
+  border-radius: 1rem;
+  border: 2px solid var(--color-border);
+  color: var(--color-text-main);
+  resize: none;
+  line-height: 1.2;
+}
+
+.pwd-gen-textarea.standalone {
+  height: auto;
+  min-height: 8rem;
+  font-size: clamp(1.5rem, 6vw, 2.5rem);
+  padding: 1.5rem;
+  text-align: center;
+}
+
+.pwd-gen-textarea.inline {
+  height: 3.5rem;
+  min-height: 3.5rem;
+  font-size: 1.25rem;
+  padding: 0.75rem 3rem 0.75rem 1rem;
+  text-align: left;
+}
+
+.pwd-gen-card {
+  padding: 3rem;
+  box-shadow: var(--shadow-md);
+  border: 1px solid var(--color-border);
+  background-color: var(--color-white);
+  border-radius: 2rem;
+}
+
+@media (max-width: 768px) {
+  .pwd-gen-card {
+    padding: 1.5rem;
+  }
+}
+
+.pwd-gen-title {
+  font-size: 2.25rem;
+  font-weight: 800;
+  color: var(--color-text-main);
+  margin-bottom: 0.5rem;
+  letter-spacing: -0.02em;
+}
+
+@media (max-width: 768px) {
+  .pwd-gen-title {
+    font-size: 1.75rem;
+  }
+}
+
+.pwd-gen-btns {
+  display: flex;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+
+.pwd-gen-btns > button {
+  flex: 1;
+  min-width: 140px;
+}

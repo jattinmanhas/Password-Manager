@@ -5,6 +5,7 @@ import { Button } from "../../../components/ui/Button";
 import { Card } from "../../../components/ui/Card";
 import { generatePassword, type PasswordOptions } from "../../../utils/password.utils";
 import { cn } from "../../../lib/utils";
+import "../../../styles/pwd-gen.css";
 
 interface PasswordGeneratorProps {
   onUsePassword?: (password: string) => void;
@@ -93,24 +94,8 @@ export function PasswordGenerator({ onUsePassword, onCancel, standalone = false 
                 <textarea
                   readOnly
                   value={generatedPassword}
-                  className="input"
+                  className={cn("pwd-gen-textarea", standalone ? "standalone" : "inline")}
                   rows={standalone ? 2 : 1}
-                  style={{ 
-                      width: "100%", 
-                      height: standalone ? "auto" : "3.5rem",
-                      minHeight: standalone ? "8rem" : "3.5rem",
-                      fontSize: standalone ? "2.5rem" : "1.25rem", 
-                      fontFamily: "monospace", 
-                      letterSpacing: "0.05em",
-                      backgroundColor: "rgba(255,255,255,0.8)",
-                      padding: standalone ? "1.5rem" : "0.75rem 3rem 0.75rem 1rem",
-                      borderRadius: "1rem",
-                      border: "2px solid var(--color-border)",
-                      color: "var(--color-text-main)",
-                      resize: "none",
-                      textAlign: standalone ? "center" : "left",
-                      lineHeight: "1.2"
-                  }}
                 />
                 {!standalone && (
                   <div style={{ position: "absolute", right: "0.5rem", top: "50%", transform: "translateY(-50%)" }}>
@@ -127,7 +112,7 @@ export function PasswordGenerator({ onUsePassword, onCancel, standalone = false 
                 )}
             </div>
             
-            <div style={{ display: "flex", gap: "1rem" }}>
+            <div className="pwd-gen-btns">
                {standalone && (
                   <Button 
                     variant="outline" 
@@ -191,13 +176,8 @@ export function PasswordGenerator({ onUsePassword, onCancel, standalone = false 
          </div>
       </div>
 
-      <div style={{ 
-          display: "grid", 
-          gridTemplateColumns: standalone ? "1fr 1fr" : "1fr", 
-          gap: "2rem",
-          padding: "1rem",
+      <div className={cn("pwd-gen-container", standalone && "standalone")} style={{ 
           backgroundColor: standalone ? "rgba(255,255,255,0.4)" : "transparent",
-          borderRadius: "1.5rem",
           border: standalone ? "1px solid var(--color-border)" : "none"
       }}>
         <div style={{ display: "flex", flexDirection: "column", gap: "0.75rem" }}>
@@ -241,7 +221,7 @@ export function PasswordGenerator({ onUsePassword, onCancel, standalone = false 
           </div>
         </div>
 
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "1rem" }}>
+        <div className="pwd-gen-options">
           <OptionToggle 
             label="Uppercase" 
             checked={options.includeUppercase} 
@@ -282,12 +262,12 @@ export function PasswordGenerator({ onUsePassword, onCancel, standalone = false 
     return (
       <div style={{ maxWidth: "56rem", margin: "0 auto" }}>
         <div style={{ marginBottom: "2.5rem", textAlign: "center" }}>
-            <h1 style={{ fontSize: "2.25rem", fontWeight: 800, color: "var(--color-text-main)", marginBottom: "0.5rem", letterSpacing: "-0.02em" }}>Password Generator</h1>
+            <h1 className="pwd-gen-title">Password Generator</h1>
             <p style={{ fontSize: "1.125rem", color: "var(--color-text-subtle)", maxWidth: "32rem", margin: "0 auto" }}>
               Secure your digital life with enterprise-grade random passwords.
             </p>
         </div>
-        <Card style={{ padding: "3rem", boxShadow: "var(--shadow-lg)", border: "1px solid var(--color-border)", backgroundColor: "var(--color-white)", borderRadius: "2rem" }}>
+        <Card className="pwd-gen-card">
           {content}
         </Card>
       </div>
