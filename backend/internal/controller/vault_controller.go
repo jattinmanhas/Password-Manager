@@ -3,6 +3,7 @@ package controller
 import (
 	"encoding/base64"
 	"errors"
+	"log/slog"
 	"net/http"
 	"strings"
 	"time"
@@ -15,10 +16,11 @@ import (
 
 type VaultController struct {
 	vault *service.VaultService
+	log   *slog.Logger
 }
 
-func NewVaultController(vaultService *service.VaultService) *VaultController {
-	return &VaultController{vault: vaultService}
+func NewVaultController(vaultService *service.VaultService, logger *slog.Logger) *VaultController {
+	return &VaultController{vault: vaultService, log: logger}
 }
 
 func (c *VaultController) HandleCreateItem(w http.ResponseWriter, r *http.Request, session domain.Session) {
@@ -43,7 +45,7 @@ func (c *VaultController) HandleCreateItem(w http.ResponseWriter, r *http.Reques
 		Metadata:    input.Metadata,
 	})
 	if err != nil {
-		c.writeVaultError(w, err, "failed to create vault item")
+		c.writeVaultError(w, r, err, "failed to create vault item")
 		return
 	}
 
@@ -53,7 +55,7 @@ func (c *VaultController) HandleCreateItem(w http.ResponseWriter, r *http.Reques
 func (c *VaultController) HandleListItems(w http.ResponseWriter, r *http.Request, session domain.Session) {
 	items, err := c.vault.ListItems(r.Context(), session.UserID)
 	if err != nil {
-		c.writeVaultError(w, err, "failed to list vault items")
+		c.writeVaultError(w, r, err, "failed to list vault items")
 		return
 	}
 
@@ -68,7 +70,7 @@ func (c *VaultController) HandleGetItem(w http.ResponseWriter, r *http.Request, 
 	itemID := strings.TrimSpace(r.PathValue("item_id"))
 	item, err := c.vault.GetItem(r.Context(), session.UserID, itemID)
 	if err != nil {
-		c.writeVaultError(w, err, "failed to load vault item")
+		c.writeVaultError(w, r, err, "failed to load vault item")
 		return
 	}
 
@@ -99,7 +101,7 @@ func (c *VaultController) HandleUpdateItem(w http.ResponseWriter, r *http.Reques
 		Metadata:    input.Metadata,
 	})
 	if err != nil {
-		c.writeVaultError(w, err, "failed to update vault item")
+		c.writeVaultError(w, r, err, "failed to update vault item")
 		return
 	}
 
@@ -109,7 +111,7 @@ func (c *VaultController) HandleUpdateItem(w http.ResponseWriter, r *http.Reques
 func (c *VaultController) HandleDeleteItem(w http.ResponseWriter, r *http.Request, session domain.Session) {
 	itemID := strings.TrimSpace(r.PathValue("item_id"))
 	if err := c.vault.DeleteItem(r.Context(), session.UserID, itemID); err != nil {
-		c.writeVaultError(w, err, "failed to delete vault item")
+		c.writeVaultError(w, r, err, "failed to delete vault item")
 		return
 	}
 
@@ -119,7 +121,7 @@ func (c *VaultController) HandleDeleteItem(w http.ResponseWriter, r *http.Reques
 func (c *VaultController) HandleGetVaultSalt(w http.ResponseWriter, r *http.Request, session domain.Session) {
 	salt, err := c.vault.GetVaultSalt(r.Context(), session.UserID)
 	if err != nil {
-		c.writeVaultError(w, err, "failed to get vault salt")
+		c.writeVaultError(w, r, err, "failed to get vault salt")
 		return
 	}
 
@@ -201,7 +203,7 @@ func vaultItemToResponse(item domain.VaultItem) dto.VaultItemResponse {
 	}
 }
 
-func (c *VaultController) writeVaultError(w http.ResponseWriter, err error, defaultMessage string) {
+func (c *VaultController) writeVaultError(w http.ResponseWriter, r *http.Request, err error, defaultMessage string) {
 	switch {
 	case errors.Is(err, domain.ErrUnauthorizedSession):
 		util.WriteError(w, http.StatusUnauthorized, "unauthorized", "invalid or expired session")
@@ -210,6 +212,7 @@ func (c *VaultController) writeVaultError(w http.ResponseWriter, err error, defa
 	case errors.Is(err, domain.ErrNotFound):
 		util.WriteError(w, http.StatusNotFound, "not_found", "vault item not found")
 	default:
+		c.log.ErrorContext(r.Context(), defaultMessage, slog.Any("error", err))
 		util.WriteError(w, http.StatusInternalServerError, "internal_error", defaultMessage)
 	}
 }

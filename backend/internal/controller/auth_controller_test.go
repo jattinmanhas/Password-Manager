@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -141,7 +142,7 @@ func setupController(repo *mockAuthRepo) *controller.AuthController {
 	return controller.NewAuthController(svc, controller.AuthCookieConfig{
 		Name:   "pmv2_session",
 		Secure: false,
-	})
+	}, slog.Default())
 }
 
 func TestHandleRegister_Success(t *testing.T) {

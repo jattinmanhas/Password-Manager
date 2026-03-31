@@ -3,6 +3,7 @@ package controller
 import (
 	"encoding/base64"
 	"errors"
+	"log/slog"
 	"net/http"
 	"strings"
 	"time"
@@ -15,10 +16,11 @@ import (
 
 type SharingController struct {
 	sharing *service.SharingService
+	log     *slog.Logger
 }
 
-func NewSharingController(sharingService *service.SharingService) *SharingController {
-	return &SharingController{sharing: sharingService}
+func NewSharingController(sharingService *service.SharingService, logger *slog.Logger) *SharingController {
+	return &SharingController{sharing: sharingService, log: logger}
 }
 
 // HandleUpsertKeys stores or updates the user's X25519 key pair.
@@ -51,7 +53,7 @@ func (c *SharingController) HandleUpsertKeys(w http.ResponseWriter, r *http.Requ
 		Nonce:                nonce,
 	})
 	if err != nil {
-		c.writeSharingError(w, err, "failed to save user keys")
+		c.writeSharingError(w, r, err, "failed to save user keys")
 		return
 	}
 
@@ -66,7 +68,7 @@ func (c *SharingController) HandleGetMyKeys(w http.ResponseWriter, r *http.Reque
 			util.WriteJSON(w, http.StatusOK, dto.UserKeysResponse{HasKeys: false})
 			return
 		}
-		c.writeSharingError(w, err, "failed to get user keys")
+		c.writeSharingError(w, r, err, "failed to get user keys")
 		return
 	}
 
@@ -88,7 +90,7 @@ func (c *SharingController) HandleGetPublicKey(w http.ResponseWriter, r *http.Re
 
 	keys, userID, err := c.sharing.GetPublicKeyByEmail(r.Context(), email)
 	if err != nil {
-		c.writeSharingError(w, err, "failed to look up recipient keys")
+		c.writeSharingError(w, r, err, "failed to look up recipient keys")
 		return
 	}
 
@@ -133,7 +135,7 @@ func (c *SharingController) HandleShareItem(w http.ResponseWriter, r *http.Reque
 	// Look up recipient user ID
 	_, recipientID, err := c.sharing.GetPublicKeyByEmail(r.Context(), recipientEmail)
 	if err != nil {
-		c.writeSharingError(w, err, "recipient not found or has no keys")
+		c.writeSharingError(w, r, err, "recipient not found or has no keys")
 		return
 	}
 
@@ -149,7 +151,7 @@ func (c *SharingController) HandleShareItem(w http.ResponseWriter, r *http.Reque
 		Permissions: permissions,
 	})
 	if err != nil {
-		c.writeSharingError(w, err, "failed to share item")
+		c.writeSharingError(w, r, err, "failed to share item")
 		return
 	}
 
@@ -173,7 +175,7 @@ func (c *SharingController) HandleRevokeShare(w http.ResponseWriter, r *http.Req
 
 	err := c.sharing.RevokeShare(r.Context(), session.UserID, itemID, recipientUserID)
 	if err != nil {
-		c.writeSharingError(w, err, "failed to revoke share")
+		c.writeSharingError(w, r, err, "failed to revoke share")
 		return
 	}
 
@@ -184,7 +186,7 @@ func (c *SharingController) HandleRevokeShare(w http.ResponseWriter, r *http.Req
 func (c *SharingController) HandleListSharedWithMe(w http.ResponseWriter, r *http.Request, session domain.Session) {
 	items, err := c.sharing.ListSharedWithMe(r.Context(), session.UserID)
 	if err != nil {
-		c.writeSharingError(w, err, "failed to list shared items")
+		c.writeSharingError(w, r, err, "failed to list shared items")
 		return
 	}
 
@@ -222,7 +224,7 @@ func (c *SharingController) HandleListSharesForItem(w http.ResponseWriter, r *ht
 
 	shares, err := c.sharing.ListSharesForItem(r.Context(), session.UserID, itemID)
 	if err != nil {
-		c.writeSharingError(w, err, "failed to list shares")
+		c.writeSharingError(w, r, err, "failed to list shares")
 		return
 	}
 
@@ -238,7 +240,7 @@ func (c *SharingController) HandleListSharesForItem(w http.ResponseWriter, r *ht
 	util.WriteJSON(w, http.StatusOK, resp)
 }
 
-func (c *SharingController) writeSharingError(w http.ResponseWriter, err error, defaultMessage string) {
+func (c *SharingController) writeSharingError(w http.ResponseWriter, r *http.Request, err error, defaultMessage string) {
 	switch {
 	case errors.Is(err, domain.ErrUnauthorizedSession):
 		util.WriteError(w, http.StatusUnauthorized, "unauthorized", "invalid or expired session")
@@ -257,6 +259,7 @@ func (c *SharingController) writeSharingError(w http.ResponseWriter, err error, 
 	case errors.Is(err, domain.ErrShareNotFound):
 		util.WriteError(w, http.StatusNotFound, "share_not_found", "share not found")
 	default:
+		c.log.ErrorContext(r.Context(), defaultMessage, slog.Any("error", err))
 		util.WriteError(w, http.StatusInternalServerError, "internal_error", defaultMessage)
 	}
 }

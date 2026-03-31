@@ -9,6 +9,7 @@ import { AccountRecovery } from "../../features/auth/pages/AccountRecovery";
 import { Dashboard } from "../../features/dashboard/pages/Dashboard";
 import { Vault } from "../../features/vault/pages/Vault";
 import { PasswordGeneratorPage } from "../../features/vault/pages/PasswordGeneratorPage";
+import { SharedVaults } from "../../features/vault/pages/SharedVaults";
 import { useAuth } from "../providers/AuthProvider";
 import { NotFound } from "../../features/shared/pages/NotFound";
 import { ErrorBoundary } from "../../features/shared/pages/ErrorBoundary";
@@ -56,7 +57,7 @@ const router = createBrowserRouter([
                     },
                     {
                         path: "/shared",
-                        element: <div>Shared Vaults Placeholder</div>
+                        element: <SharedVaults />
                     },
                     {
                         path: "/health",

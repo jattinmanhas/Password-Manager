@@ -1,6 +1,12 @@
 package database
 
-const schemaSQL = `
+import (
+	"context"
+	"database/sql"
+	"fmt"
+)
+
+const UpSQL = `
 CREATE TABLE IF NOT EXISTS users (
   id UUID PRIMARY KEY,
   email TEXT UNIQUE NOT NULL,
@@ -25,21 +31,16 @@ CREATE TABLE IF NOT EXISTS auth_credentials (
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
-ALTER TABLE IF EXISTS auth_credentials ADD COLUMN IF NOT EXISTS totp_failed_attempts INTEGER NOT NULL DEFAULT 0;
-ALTER TABLE IF EXISTS auth_credentials ADD COLUMN IF NOT EXISTS totp_window_started_at TIMESTAMPTZ;
-ALTER TABLE IF EXISTS auth_credentials ADD COLUMN IF NOT EXISTS totp_locked_until TIMESTAMPTZ;
-
 CREATE TABLE IF NOT EXISTS user_recovery (
   user_id UUID PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
   recovery_key_hash BYTEA NOT NULL,
   recovery_enabled BOOLEAN NOT NULL DEFAULT TRUE,
+  wrapped_kek BYTEA,
+  wrap_nonce BYTEA,
+  kek_salt BYTEA,
   last_recovery_at TIMESTAMPTZ,
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
-
-ALTER TABLE IF EXISTS user_recovery ADD COLUMN IF NOT EXISTS wrapped_kek BYTEA;
-ALTER TABLE IF EXISTS user_recovery ADD COLUMN IF NOT EXISTS wrap_nonce BYTEA;
-ALTER TABLE IF EXISTS user_recovery ADD COLUMN IF NOT EXISTS kek_salt BYTEA;
 
 CREATE TABLE IF NOT EXISTS user_keys (
   user_id UUID PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
@@ -74,8 +75,6 @@ CREATE TABLE IF NOT EXISTS vault_items (
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
-ALTER TABLE IF EXISTS vault_items ADD COLUMN IF NOT EXISTS wrap_nonce BYTEA;
-
 CREATE TABLE IF NOT EXISTS vault_shares (
   item_id UUID NOT NULL REFERENCES vault_items(id) ON DELETE CASCADE,
   user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
@@ -87,9 +86,6 @@ CREATE TABLE IF NOT EXISTS vault_shares (
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   PRIMARY KEY (item_id, user_id)
 );
-
-ALTER TABLE IF EXISTS vault_shares ADD COLUMN IF NOT EXISTS shared_by_user_id UUID REFERENCES users(id) ON DELETE SET NULL;
-ALTER TABLE IF EXISTS vault_shares ADD COLUMN IF NOT EXISTS wrap_nonce BYTEA;
 
 CREATE TABLE IF NOT EXISTS vault_attachments (
   id UUID PRIMARY KEY,
@@ -149,3 +145,40 @@ CREATE INDEX IF NOT EXISTS idx_vault_attachments_item_id ON vault_attachments(it
 CREATE INDEX IF NOT EXISTS idx_backups_registry_created_by_user_id ON backups_registry(created_by_user_id);
 CREATE INDEX IF NOT EXISTS idx_totp_recovery_codes_user_id ON totp_recovery_codes(user_id);
 `
+
+const DropSQL = `
+DROP TABLE IF EXISTS totp_recovery_codes CASCADE;
+DROP TABLE IF EXISTS backups_registry CASCADE;
+DROP TABLE IF EXISTS audit_events CASCADE;
+DROP TABLE IF EXISTS sessions CASCADE;
+DROP TABLE IF EXISTS vault_attachments CASCADE;
+DROP TABLE IF EXISTS vault_shares CASCADE;
+DROP TABLE IF EXISTS vault_items CASCADE;
+DROP TABLE IF EXISTS vault_folders CASCADE;
+DROP TABLE IF EXISTS user_keys CASCADE;
+DROP TABLE IF EXISTS user_recovery CASCADE;
+DROP TABLE IF EXISTS auth_credentials CASCADE;
+DROP TABLE IF EXISTS users CASCADE;
+`
+
+func MigrateUp(ctx context.Context, db *sql.DB) error {
+	if _, err := db.ExecContext(ctx, UpSQL); err != nil {
+		return fmt.Errorf("run schema migration up: %w", err)
+	}
+	return nil
+}
+
+func MigrateDown(ctx context.Context, db *sql.DB) error {
+	// For this initial phase, Down and Drop are equivalent
+	if _, err := db.ExecContext(ctx, DropSQL); err != nil {
+		return fmt.Errorf("run schema migration down: %w", err)
+	}
+	return nil
+}
+
+func DropAll(ctx context.Context, db *sql.DB) error {
+	if _, err := db.ExecContext(ctx, DropSQL); err != nil {
+		return fmt.Errorf("run schema drop all: %w", err)
+	}
+	return nil
+}

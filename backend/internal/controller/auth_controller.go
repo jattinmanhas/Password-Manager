@@ -2,6 +2,7 @@ package controller
 
 import (
 	"errors"
+	"log/slog"
 	"net/http"
 	"strings"
 	"time"
@@ -16,6 +17,7 @@ type AuthController struct {
 	auth                *service.AuthService
 	sessionCookieName   string
 	sessionCookieSecure bool
+	log                 *slog.Logger
 }
 
 type AuthCookieConfig struct {
@@ -23,7 +25,7 @@ type AuthCookieConfig struct {
 	Secure bool
 }
 
-func NewAuthController(authService *service.AuthService, cookieConfig AuthCookieConfig) *AuthController {
+func NewAuthController(authService *service.AuthService, cookieConfig AuthCookieConfig, logger *slog.Logger) *AuthController {
 	cookieName := strings.TrimSpace(cookieConfig.Name)
 	if cookieName == "" {
 		cookieName = "pmv2_session"
@@ -33,6 +35,7 @@ func NewAuthController(authService *service.AuthService, cookieConfig AuthCookie
 		auth:                authService,
 		sessionCookieName:   cookieName,
 		sessionCookieSecure: cookieConfig.Secure,
+		log:                 logger,
 	}
 }
 
@@ -53,6 +56,7 @@ func (c *AuthController) HandleRegister(w http.ResponseWriter, r *http.Request) 
 		case errors.Is(err, domain.ErrWeakPassword):
 			util.WriteError(w, http.StatusBadRequest, "weak_password", "password does not meet complexity requirements")
 		default:
+			c.log.ErrorContext(r.Context(), "register failed", slog.Any("error", err))
 			util.WriteError(w, http.StatusInternalServerError, "internal_error", "registration failed")
 		}
 		return
@@ -101,6 +105,7 @@ func (c *AuthController) HandleLogin(w http.ResponseWriter, r *http.Request) {
 		case errors.Is(err, domain.ErrWeakPassword):
 			util.WriteError(w, http.StatusUnauthorized, "weak_password", "password does not meet complexity requirements")
 		default:
+			c.log.ErrorContext(r.Context(), "login failed", slog.Any("error", err))
 			util.WriteError(w, http.StatusInternalServerError, "internal_error", "login failed")
 		}
 		return
@@ -168,6 +173,7 @@ func (c *AuthController) HandleTOTPEnable(w http.ResponseWriter, r *http.Request
 		case errors.Is(err, domain.ErrMissingTOTPSecret):
 			util.WriteError(w, http.StatusBadRequest, "totp_not_initialized", "totp setup required before enable")
 		default:
+			c.log.ErrorContext(r.Context(), "enable totp failed", slog.String("user_id", session.UserID), slog.Any("error", err))
 			util.WriteError(w, http.StatusInternalServerError, "internal_error", "failed to enable totp")
 		}
 		return
@@ -195,6 +201,7 @@ func (c *AuthController) HandleTOTPVerify(w http.ResponseWriter, r *http.Request
 		case errors.Is(err, domain.ErrMissingTOTPSecret):
 			util.WriteError(w, http.StatusBadRequest, "totp_not_enabled", "totp is not enabled")
 		default:
+			c.log.ErrorContext(r.Context(), "verify totp failed", slog.String("user_id", session.UserID), slog.Any("error", err))
 			util.WriteError(w, http.StatusInternalServerError, "internal_error", "failed to verify totp")
 		}
 		return
@@ -205,6 +212,7 @@ func (c *AuthController) HandleTOTPVerify(w http.ResponseWriter, r *http.Request
 
 func (c *AuthController) HandleTOTPDisable(w http.ResponseWriter, r *http.Request, session domain.Session) {
 	if err := c.auth.DisableTOTP(r.Context(), session.UserID); err != nil {
+		c.log.ErrorContext(r.Context(), "disable totp failed", slog.String("user_id", session.UserID), slog.Any("error", err))
 		util.WriteError(w, http.StatusInternalServerError, "internal_error", "failed to disable totp")
 		return
 	}
@@ -248,6 +256,7 @@ func (c *AuthController) HandleRecoverySetup(w http.ResponseWriter, r *http.Requ
 		case errors.Is(err, domain.ErrInvalidRecoveryKey):
 			util.WriteError(w, http.StatusBadRequest, "invalid_recovery_key", "invalid recovery key")
 		default:
+			c.log.ErrorContext(r.Context(), "setup recovery failed", slog.String("user_id", session.UserID), slog.Any("error", err))
 			util.WriteError(w, http.StatusInternalServerError, "internal_error", "failed to setup recovery")
 		}
 		return
@@ -259,6 +268,7 @@ func (c *AuthController) HandleRecoverySetup(w http.ResponseWriter, r *http.Requ
 func (c *AuthController) HandleGetRecoveryStatus(w http.ResponseWriter, r *http.Request, session domain.Session) {
 	status, err := c.auth.GetRecoveryStatus(r.Context(), session.UserID)
 	if err != nil {
+		c.log.ErrorContext(r.Context(), "get recovery status failed", slog.String("user_id", session.UserID), slog.Any("error", err))
 		util.WriteError(w, http.StatusInternalServerError, "internal_error", "failed to check recovery status")
 		return
 	}
@@ -294,6 +304,7 @@ func (c *AuthController) HandleRecoveryVerify(w http.ResponseWriter, r *http.Req
 		case errors.Is(err, domain.ErrMFARateLimited):
 			util.WriteError(w, http.StatusTooManyRequests, "mfa_rate_limited", "too many invalid mfa attempts, try again later")
 		default:
+			c.log.ErrorContext(r.Context(), "verify recovery key failed", slog.Any("error", err))
 			util.WriteError(w, http.StatusInternalServerError, "internal_error", "failed to verify recovery key")
 		}
 		return
@@ -333,6 +344,7 @@ func (c *AuthController) HandleRecoveryReset(w http.ResponseWriter, r *http.Requ
 		case errors.Is(err, domain.ErrWeakPassword):
 			util.WriteError(w, http.StatusBadRequest, "weak_password", "password does not meet complexity requirements")
 		default:
+			c.log.ErrorContext(r.Context(), "reset password failed", slog.Any("error", err))
 			util.WriteError(w, http.StatusInternalServerError, "internal_error", "failed to reset password")
 		}
 		return

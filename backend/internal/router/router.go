@@ -1,6 +1,7 @@
 package router
 
 import (
+	"log/slog"
 	"net/http"
 	"strings"
 	"time"
@@ -60,14 +61,14 @@ func (g routeGroup) Handle(method string, path string, handler http.HandlerFunc,
 	g.mux.HandleFunc(pattern, handler)
 }
 
-func NewRouter(cfg config.Config, authService *service.AuthService, vaultService *service.VaultService, folderService *service.FolderService, sharingService *service.SharingService) http.Handler {
+func NewRouter(cfg config.Config, logger *slog.Logger, authService *service.AuthService, vaultService *service.VaultService, folderService *service.FolderService, sharingService *service.SharingService) http.Handler {
 	authController := controller.NewAuthController(authService, controller.AuthCookieConfig{
 		Name:   cfg.SessionCookieName,
 		Secure: isProductionEnv(cfg.Env),
-	})
-	vaultController := controller.NewVaultController(vaultService)
-	folderController := controller.NewFolderController(folderService)
-	sharingController := controller.NewSharingController(sharingService)
+	}, logger)
+	vaultController := controller.NewVaultController(vaultService, logger)
+	folderController := controller.NewFolderController(folderService, logger)
+	sharingController := controller.NewSharingController(sharingService, logger)
 	authMiddleware := middlewares.NewAuthMiddleware(authService, cfg.SessionCookieName)
 	mux := http.NewServeMux()
 
@@ -138,7 +139,9 @@ func NewRouter(cfg config.Config, authService *service.AuthService, vaultService
 		util.WriteJSON(w, http.StatusNotFound, dto.ErrorResponse{Error: "not_found", Message: "route not found"})
 	})
 
-	return middlewares.CORS(cfg.FrontendOrigin, middlewares.WithSecurityHeaders(mux))
+	return middlewares.CORS(cfg.FrontendOrigin, middlewares.WithSecurityHeaders(
+		middlewares.RequestLogger(logger)(mux),
+	))
 }
 
 func joinPath(prefix string, path string) string {

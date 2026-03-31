@@ -2,7 +2,7 @@ package main
 
 import (
 	"context"
-	"log"
+	"log/slog"
 	"net/http"
 	"os"
 	"os/signal"
@@ -11,6 +11,7 @@ import (
 
 	"pmv2/backend/internal/config"
 	"pmv2/backend/internal/database"
+	"pmv2/backend/internal/logger"
 	"pmv2/backend/internal/repository"
 	"pmv2/backend/internal/router"
 	"pmv2/backend/internal/service"
@@ -18,15 +19,21 @@ import (
 
 func main() {
 	cfg := config.Load()
+
+	// Initialise structured logger (writes to stdout + rotating file).
+	log, logFile := logger.New(cfg)
+	defer logFile.Close()
+
 	ctx := context.Background()
 
-	postgres, err := database.OpenAndMigrate(ctx, cfg.DatabaseURL)
+	postgres, err := database.New(ctx, cfg.DatabaseURL)
 	if err != nil {
-		log.Fatalf("database init failed: %v", err)
+		log.Error("database init failed", slog.Any("error", err))
+		os.Exit(1)
 	}
 	defer func() {
 		if err := postgres.Close(); err != nil {
-			log.Printf("database close failed: %v", err)
+			log.Error("database close failed", slog.Any("error", err))
 		}
 	}()
 
@@ -47,32 +54,33 @@ func main() {
 		for range ticker.C {
 			deleted, err := authRepository.DeleteExpiredSessions(context.Background())
 			if err != nil {
-				log.Printf("failed to delete expired sessions: %v", err)
+				log.Error("failed to delete expired sessions", slog.Any("error", err))
 			} else if deleted > 0 {
-				log.Printf("deleted %d expired/revoked sessions", deleted)
+				log.Info("deleted expired/revoked sessions", slog.Int64("count", deleted))
 			}
 		}
 	}()
 
 	httpServer := &http.Server{
 		Addr:         ":" + cfg.Port,
-		Handler:      router.NewRouter(cfg, authService, vaultService, folderService, sharingService),
+		Handler:      router.NewRouter(cfg, log, authService, vaultService, folderService, sharingService),
 		ReadTimeout:  cfg.ReadTimeout,
 		WriteTimeout: cfg.WriteTimeout,
 		IdleTimeout:  cfg.IdleTimeout,
 	}
 
 	go func() {
-		log.Printf("api listening on :%s (%s)", cfg.Port, cfg.Env)
+		log.Info("api listening", slog.String("port", cfg.Port), slog.String("env", cfg.Env))
 		if err := httpServer.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-			log.Fatalf("server error: %v", err)
+			log.Error("server error", slog.Any("error", err))
+			os.Exit(1)
 		}
 	}()
 
-	shutdown(httpServer)
+	shutdown(httpServer, log)
 }
 
-func shutdown(srv *http.Server) {
+func shutdown(srv *http.Server, log *slog.Logger) {
 	sigCh := make(chan os.Signal, 1)
 	signal.Notify(sigCh, os.Interrupt, syscall.SIGTERM)
 	<-sigCh
@@ -81,9 +89,9 @@ func shutdown(srv *http.Server) {
 	defer cancel()
 
 	if err := srv.Shutdown(ctx); err != nil {
-		log.Printf("graceful shutdown failed: %v", err)
+		log.Error("graceful shutdown failed", slog.Any("error", err))
 		return
 	}
 
-	log.Println("server shutdown complete")
+	log.Info("server shutdown complete")
 }

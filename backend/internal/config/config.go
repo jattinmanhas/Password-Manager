@@ -19,6 +19,14 @@ type Config struct {
 	TOTPIssuer        string
 	FrontendOrigin    string
 	SessionCookieName string
+
+	// Logging
+	LogLevel       string
+	LogFormat      string // "text" or "json"
+	LogFilePath    string
+	LogMaxSizeMB   int
+	LogMaxBackups  int
+	LogMaxAgeDays  int
 }
 
 func Load() Config {
@@ -36,6 +44,14 @@ func Load() Config {
 		TOTPIssuer:        getenv("TOTP_ISSUER", "PMV2"),
 		FrontendOrigin:    getenv("FRONTEND_ORIGIN", "http://localhost:5173"),
 		SessionCookieName: getenv("SESSION_COOKIE_NAME", "pmv2_session"),
+
+		// Logging
+		LogLevel:      getenv("LOG_LEVEL", "info"),
+		LogFormat:     getenv("LOG_FORMAT", "text"),
+		LogFilePath:   getenv("LOG_FILE_PATH", "logs/api.log"),
+		LogMaxSizeMB:  mustInt(getenv("LOG_MAX_SIZE_MB", "100")),
+		LogMaxBackups: mustInt(getenv("LOG_MAX_BACKUPS", "10")),
+		LogMaxAgeDays: mustInt(getenv("LOG_MAX_AGE_DAYS", "28")),
 	}
 }
 
@@ -53,4 +69,15 @@ func mustDuration(value string) time.Duration {
 		return 10 * time.Second
 	}
 	return d
+}
+
+func mustInt(value string) int {
+	n := 0
+	for _, c := range value {
+		if c < '0' || c > '9' {
+			return 0
+		}
+		n = n*10 + int(c-'0')
+	}
+	return n
 }

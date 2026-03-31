@@ -2,6 +2,7 @@ package controller
 
 import (
 	"encoding/base64"
+	"log/slog"
 	"net/http"
 	"strings"
 	"time"
@@ -14,10 +15,11 @@ import (
 
 type FolderController struct {
 	folders *service.FolderService
+	log     *slog.Logger
 }
 
-func NewFolderController(folderService *service.FolderService) *FolderController {
-	return &FolderController{folders: folderService}
+func NewFolderController(folderService *service.FolderService, logger *slog.Logger) *FolderController {
+	return &FolderController{folders: folderService, log: logger}
 }
 
 func (c *FolderController) HandleCreateFolder(w http.ResponseWriter, r *http.Request, session domain.Session) {
@@ -45,6 +47,7 @@ func (c *FolderController) HandleCreateFolder(w http.ResponseWriter, r *http.Req
 		Nonce:          nonce,
 	})
 	if err != nil {
+		c.log.ErrorContext(r.Context(), "create folder failed", slog.String("user_id", session.UserID), slog.Any("error", err))
 		util.WriteError(w, http.StatusInternalServerError, "internal_error", "failed to create folder")
 		return
 	}
@@ -55,6 +58,7 @@ func (c *FolderController) HandleCreateFolder(w http.ResponseWriter, r *http.Req
 func (c *FolderController) HandleListFolders(w http.ResponseWriter, r *http.Request, session domain.Session) {
 	folders, err := c.folders.ListFolders(r.Context(), session.UserID)
 	if err != nil {
+		c.log.ErrorContext(r.Context(), "list folders failed", slog.String("user_id", session.UserID), slog.Any("error", err))
 		util.WriteError(w, http.StatusInternalServerError, "internal_error", "failed to list folders")
 		return
 	}
@@ -89,6 +93,7 @@ func (c *FolderController) HandleUpdateFolder(w http.ResponseWriter, r *http.Req
 
 	folder, err := c.folders.UpdateFolder(r.Context(), session.UserID, folderID, nameCiphertext, nonce)
 	if err != nil {
+		c.log.ErrorContext(r.Context(), "update folder failed", slog.String("user_id", session.UserID), slog.String("folder_id", folderID), slog.Any("error", err))
 		util.WriteError(w, http.StatusInternalServerError, "internal_error", "failed to update folder")
 		return
 	}
@@ -99,6 +104,7 @@ func (c *FolderController) HandleUpdateFolder(w http.ResponseWriter, r *http.Req
 func (c *FolderController) HandleDeleteFolder(w http.ResponseWriter, r *http.Request, session domain.Session) {
 	folderID := strings.TrimSpace(r.PathValue("folder_id"))
 	if err := c.folders.DeleteFolder(r.Context(), session.UserID, folderID); err != nil {
+		c.log.ErrorContext(r.Context(), "delete folder failed", slog.String("user_id", session.UserID), slog.String("folder_id", folderID), slog.Any("error", err))
 		util.WriteError(w, http.StatusInternalServerError, "internal_error", "failed to delete folder")
 		return
 	}
