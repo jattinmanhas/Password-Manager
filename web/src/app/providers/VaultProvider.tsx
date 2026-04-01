@@ -4,6 +4,7 @@ import type { VaultItemResponse } from "../../features/vault/types";
 import type { VaultViewItem } from "../../features/vault/vault.types";
 import { wipeKeyMaterial } from "../../features/vault/vault.utils";
 import { createDefaultXChaCha20Poly1305 } from "../../crypto/adapters";
+import { useAuth } from "./AuthProvider";
 
 interface VaultSessionState {
   aead: XChaCha20Poly1305Aead | null;
@@ -34,6 +35,8 @@ export function VaultProvider({ children }: { children: ReactNode }) {
   const [items, setItems] = useState<VaultViewItem[]>([]);
   const [userPublicKey, setUserPublicKey] = useState<Uint8Array | null>(null);
   const [userPrivateKey, setUserPrivateKey] = useState<Uint8Array | null>(null);
+
+  const { session } = useAuth();
 
   // Initialize vault encryption adapter once
   useEffect(() => {
@@ -81,6 +84,13 @@ export function VaultProvider({ children }: { children: ReactNode }) {
     });
     setUserPublicKey(null);
   }, []);
+
+  // Clear vault keys when logging out
+  useEffect(() => {
+    if (!session) {
+      lockVault();
+    }
+  }, [session, lockVault]);
 
   return (
     <VaultContext.Provider

@@ -135,6 +135,17 @@ CREATE TABLE IF NOT EXISTS totp_recovery_codes (
   PRIMARY KEY (user_id, code_hash)
 );
 
+CREATE TABLE IF NOT EXISTS family_memberships (
+  user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  friend_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'accepted')),
+  initiated_by UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  PRIMARY KEY (user_id, friend_id),
+  CHECK (user_id != friend_id)
+);
+
 CREATE INDEX IF NOT EXISTS idx_vault_items_owner_user_id ON vault_items(owner_user_id);
 CREATE INDEX IF NOT EXISTS idx_sessions_user_id ON sessions(user_id);
 CREATE INDEX IF NOT EXISTS idx_sessions_refresh_token_hash ON sessions(refresh_token_hash);
@@ -144,9 +155,12 @@ CREATE INDEX IF NOT EXISTS idx_vault_folders_owner_user_id ON vault_folders(owne
 CREATE INDEX IF NOT EXISTS idx_vault_attachments_item_id ON vault_attachments(item_id);
 CREATE INDEX IF NOT EXISTS idx_backups_registry_created_by_user_id ON backups_registry(created_by_user_id);
 CREATE INDEX IF NOT EXISTS idx_totp_recovery_codes_user_id ON totp_recovery_codes(user_id);
+CREATE INDEX IF NOT EXISTS idx_family_memberships_user_id ON family_memberships(user_id);
+CREATE INDEX IF NOT EXISTS idx_family_memberships_friend_id ON family_memberships(friend_id);
 `
 
 const DropSQL = `
+DROP TABLE IF EXISTS family_memberships CASCADE;
 DROP TABLE IF EXISTS totp_recovery_codes CASCADE;
 DROP TABLE IF EXISTS backups_registry CASCADE;
 DROP TABLE IF EXISTS audit_events CASCADE;

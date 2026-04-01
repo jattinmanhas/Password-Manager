@@ -12,6 +12,7 @@ import { PasswordGeneratorPage } from "../../features/vault/pages/PasswordGenera
 import { SharedVaults } from "../../features/vault/pages/SharedVaults";
 import { useAuth } from "../providers/AuthProvider";
 import { NotFound } from "../../features/shared/pages/NotFound";
+import { Family } from "../../features/family/pages/Family";
 import { ErrorBoundary } from "../../features/shared/pages/ErrorBoundary";
 
 const GuardedRoute = ({ children }: { children: React.ReactNode }) => {
@@ -69,7 +70,7 @@ const router = createBrowserRouter([
                     },
                     {
                         path: "/family",
-                        element: <div>Family Members Placeholder</div>
+                        element: <Family />
                     },
                     {
                         path: "/settings",

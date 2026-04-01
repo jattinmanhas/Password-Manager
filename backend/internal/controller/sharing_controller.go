@@ -258,6 +258,8 @@ func (c *SharingController) writeSharingError(w http.ResponseWriter, r *http.Req
 		util.WriteError(w, http.StatusNotFound, "recipient_keys_not_found", "recipient has not set up encryption keys")
 	case errors.Is(err, domain.ErrShareNotFound):
 		util.WriteError(w, http.StatusNotFound, "share_not_found", "share not found")
+	case errors.Is(err, domain.ErrNotFamilyMember):
+		util.WriteError(w, http.StatusForbidden, "not_family_member", "you can only share with family members")
 	default:
 		c.log.ErrorContext(r.Context(), defaultMessage, slog.Any("error", err))
 		util.WriteError(w, http.StatusInternalServerError, "internal_error", defaultMessage)

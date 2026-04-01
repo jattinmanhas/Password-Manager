@@ -184,6 +184,7 @@ export function VaultItemViewModal({ item, vaultName, onClose, onShare }: VaultI
               className="dialog-close"
               onClick={onClose}
               aria-label="Close modal"
+              style={{ position: "static", top: "auto", right: "auto" }}
             >
               <X size={18} />
             </button>

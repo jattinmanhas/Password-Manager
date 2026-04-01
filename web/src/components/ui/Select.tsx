@@ -1,5 +1,5 @@
-import React, { useState, useRef, useEffect } from "react";
-import { ChevronDown, Check } from "lucide-react";
+import React, { useState, useRef, useEffect, useMemo } from "react";
+import { ChevronDown, Check, Search } from "lucide-react";
 import { cn } from "../../lib/utils";
 
 interface Option {
@@ -15,13 +15,22 @@ interface SelectProps {
   className?: string;
   label?: string;
   disabled?: boolean;
+  searchable?: boolean;
 }
 
-export function Select({ options, value, onChange, placeholder = "Select option...", className, disabled }: SelectProps) {
+export function Select({ options, value, onChange, placeholder = "Select option...", className, disabled, searchable = false }: SelectProps) {
   const [isOpen, setIsOpen] = useState(false);
+  const [search, setSearch] = useState("");
   const containerRef = useRef<HTMLDivElement>(null);
+  const searchInputRef = useRef<HTMLInputElement>(null);
 
   const selectedOption = options.find((opt) => opt.value === value);
+
+  const filteredOptions = useMemo(() => {
+    if (!searchable || !search) return options;
+    const q = search.toLowerCase();
+    return options.filter((opt) => opt.label.toLowerCase().includes(q));
+  }, [options, searchable, search]);
 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
@@ -32,6 +41,14 @@ export function Select({ options, value, onChange, placeholder = "Select option.
     document.addEventListener("mousedown", handleClickOutside);
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
+
+  useEffect(() => {
+    if (isOpen && searchable) {
+      setSearch("");
+      // Small timeout to ensure DOM is rendered
+      setTimeout(() => searchInputRef.current?.focus(), 10);
+    }
+  }, [isOpen, searchable]);
 
   return (
     <div className={cn("flex flex-col gap-1.5", className)} ref={containerRef} style={{ position: "relative", opacity: disabled ? 0.6 : 1, pointerEvents: disabled ? "none" : "auto" }}>
@@ -72,44 +89,69 @@ export function Select({ options, value, onChange, placeholder = "Select option.
             borderRadius: "0.75rem",
             boxShadow: "0 10px 15px -3px rgba(0,0,0,0.1), 0 4px 6px -2px rgba(0,0,0,0.05)",
             zIndex: 1000,
-            maxHeight: "15rem",
-            overflowY: "auto",
+            maxHeight: "15.5rem",
+            display: "flex",
+            flexDirection: "column"
           }}
         >
-          {options.map((option) => (
-            <div
-              key={option.value}
-              onClick={() => {
-                onChange(option.value);
-                setIsOpen(false);
-              }}
-              style={{
-                padding: "0.75rem 1rem",
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "space-between",
-                cursor: "pointer",
-                backgroundColor: value === option.value ? "rgba(37, 99, 235, 0.05)" : "transparent",
-                color: value === option.value ? "var(--color-security-blue)" : "var(--color-text-main)",
-                fontSize: "0.875rem",
-                transition: "background-color 0.1s",
-              }}
-              onMouseEnter={(e) => {
-                if (value !== option.value) e.currentTarget.style.backgroundColor = "rgba(0,0,0,0.02)";
-              }}
-              onMouseLeave={(e) => {
-                if (value !== option.value) e.currentTarget.style.backgroundColor = "transparent";
-              }}
-            >
-              <span>{option.label}</span>
-              {value === option.value && <Check size={16} />}
-            </div>
-          ))}
-          {options.length === 0 && (
-            <div style={{ padding: "1rem", textAlign: "center", color: "var(--color-text-light)", fontSize: "0.875rem" }}>
-              No options available
+          {searchable && (
+            <div style={{ padding: "0.75rem", borderBottom: "1px solid var(--color-border)", display: "flex", alignItems: "center", gap: "0.5rem", position: "sticky", top: 0, background: "#fff", zIndex: 1 }}>
+              <Search size={16} style={{ color: "var(--color-text-light)" }} />
+              <input
+                ref={searchInputRef}
+                type="text"
+                placeholder="Search..."
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                onClick={(e) => e.stopPropagation()}
+                style={{
+                  width: "100%",
+                  border: "none",
+                  outline: "none",
+                  fontSize: "0.875rem",
+                  color: "var(--color-text-main)",
+                  background: "transparent"
+                }}
+              />
             </div>
           )}
+          
+          <div style={{ overflowY: "auto", maxHeight: "12rem" }}>
+            {filteredOptions.map((option) => (
+              <div
+                key={option.value}
+                onClick={() => {
+                  onChange(option.value);
+                  setIsOpen(false);
+                }}
+                style={{
+                  padding: "0.75rem 1rem",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "space-between",
+                  cursor: "pointer",
+                  backgroundColor: value === option.value ? "rgba(37, 99, 235, 0.05)" : "transparent",
+                  color: value === option.value ? "var(--color-security-blue)" : "var(--color-text-main)",
+                  fontSize: "0.875rem",
+                  transition: "background-color 0.1s",
+                }}
+                onMouseEnter={(e) => {
+                  if (value !== option.value) e.currentTarget.style.backgroundColor = "rgba(0,0,0,0.02)";
+                }}
+                onMouseLeave={(e) => {
+                  if (value !== option.value) e.currentTarget.style.backgroundColor = "transparent";
+                }}
+              >
+                <span>{option.label}</span>
+                {value === option.value && <Check size={16} />}
+              </div>
+            ))}
+            {filteredOptions.length === 0 && (
+              <div style={{ padding: "1.5rem 1rem", textAlign: "center", color: "var(--color-text-light)", fontSize: "0.875rem" }}>
+                No options available
+              </div>
+            )}
+          </div>
         </div>
       )}
     </div>

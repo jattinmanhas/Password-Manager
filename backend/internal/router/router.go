@@ -61,7 +61,7 @@ func (g routeGroup) Handle(method string, path string, handler http.HandlerFunc,
 	g.mux.HandleFunc(pattern, handler)
 }
 
-func NewRouter(cfg config.Config, logger *slog.Logger, authService *service.AuthService, vaultService *service.VaultService, folderService *service.FolderService, sharingService *service.SharingService) http.Handler {
+func NewRouter(cfg config.Config, logger *slog.Logger, authService *service.AuthService, vaultService *service.VaultService, folderService *service.FolderService, sharingService *service.SharingService, familyService *service.FamilyService) http.Handler {
 	authController := controller.NewAuthController(authService, controller.AuthCookieConfig{
 		Name:   cfg.SessionCookieName,
 		Secure: isProductionEnv(cfg.Env),
@@ -69,6 +69,7 @@ func NewRouter(cfg config.Config, logger *slog.Logger, authService *service.Auth
 	vaultController := controller.NewVaultController(vaultService, logger)
 	folderController := controller.NewFolderController(folderService, logger)
 	sharingController := controller.NewSharingController(sharingService, logger)
+	familyController := controller.NewFamilyController(familyService, logger)
 	authMiddleware := middlewares.NewAuthMiddleware(authService, cfg.SessionCookieName)
 	mux := http.NewServeMux()
 
@@ -79,6 +80,7 @@ func NewRouter(cfg config.Config, logger *slog.Logger, authService *service.Auth
 	vault := v1.Group("/vault")
 	folders := v1.Group("/folders")
 	users := v1.Group("/users")
+	family := v1.Group("/family")
 
 	// Health check
 	root.Handle(http.MethodGet, "/healthz", func(w http.ResponseWriter, r *http.Request) {
@@ -134,6 +136,14 @@ func NewRouter(cfg config.Config, logger *slog.Logger, authService *service.Auth
 	users.Handle(http.MethodPut, "/keys", authMiddleware.WithSession(sharingController.HandleUpsertKeys))
 	users.Handle(http.MethodGet, "/keys", authMiddleware.WithSession(sharingController.HandleGetMyKeys))
 	users.Handle(http.MethodGet, "/keys/lookup", authMiddleware.WithSession(sharingController.HandleGetPublicKey))
+
+	// Family routes
+	family.Handle(http.MethodPost, "/request", authMiddleware.WithSession(familyController.HandleSendRequest))
+	family.Handle(http.MethodPost, "/request/accept", authMiddleware.WithSession(familyController.HandleAcceptRequest))
+	family.Handle(http.MethodPost, "/request/reject", authMiddleware.WithSession(familyController.HandleRejectRequest))
+	family.Handle(http.MethodGet, "", authMiddleware.WithSession(familyController.HandleListMembers))
+	family.Handle(http.MethodGet, "/requests", authMiddleware.WithSession(familyController.HandleListRequests))
+	family.Handle(http.MethodDelete, "/{user_id}", authMiddleware.WithSession(familyController.HandleRemoveMember))
 
 	root.Handle("", "/", func(w http.ResponseWriter, r *http.Request) {
 		util.WriteJSON(w, http.StatusNotFound, dto.ErrorResponse{Error: "not_found", Message: "route not found"})

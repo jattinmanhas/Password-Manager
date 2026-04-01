@@ -16,6 +16,7 @@ import { deriveMasterKey } from "../../../crypto";
 import { decryptVaultItem } from "../../../crypto";
 import { createDefaultArgon2idKdf } from "../../../crypto/adapters";
 import { getVerifierSalt, isVerifierItem, KEK_VERIFIER_TOKEN_BYTES, constantTimeEquals } from "../vault.utils";
+import { VaultItemViewModal } from "../components/VaultItemViewModal";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -89,6 +90,7 @@ function SharedItemCard({ item }: { item: DecryptedSharedItem }) {
     <article
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}
+      onClick={() => item.secret && !item.isCorrupted && (item as any).onClick?.()}
       style={{
         background: "var(--color-white)",
         border: "1px solid var(--color-border)",
@@ -101,6 +103,7 @@ function SharedItemCard({ item }: { item: DecryptedSharedItem }) {
         flexDirection: "column",
         gap: "0.75rem",
         opacity: item.isCorrupted ? 0.65 : 1,
+        cursor: !item.isCorrupted && item.secret ? "pointer" : "default",
       }}
     >
       {/* Header */}
@@ -217,6 +220,7 @@ export function SharedVaults() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [unlocking, setUnlocking] = useState(false);
+  const [selectedItem, setSelectedItem] = useState<DecryptedSharedItem | null>(null);
 
   // ── Decrypt and load shared items ──────────────────────────────────────────
   const loadSharedItems = useCallback(async () => {
@@ -469,11 +473,31 @@ export function SharedVaults() {
 
       {/* Items grid */}
       {!loading && items.length > 0 && (
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(300px, 1fr))", gap: "1rem" }}>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(304px, 1fr))", gap: "1.25rem" }}>
           {items.map((item) => (
-            <SharedItemCard key={item.raw.id} item={item} />
+            <SharedItemCard 
+              key={item.raw.id} 
+              item={{ ...item, onClick: () => setSelectedItem(item) } as any} 
+            />
           ))}
         </div>
+      )}
+
+      {/* Item View Modal */}
+      {selectedItem && selectedItem.secret && (
+        <VaultItemViewModal
+          item={{
+            id: selectedItem.raw.id,
+            secret: selectedItem.secret,
+            updatedAt: selectedItem.raw.updated_at,
+            isCorrupted: selectedItem.isCorrupted,
+            vaultId: "shared",
+            vaultName: "Shared Items",
+            vaultType: "shared",
+          }}
+          vaultName={`Shared by ${selectedItem.raw.shared_by_name || selectedItem.raw.shared_by_email.split('@')[0]}`}
+          onClose={() => setSelectedItem(null)}
+        />
       )}
     </div>
   );

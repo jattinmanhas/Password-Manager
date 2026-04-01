@@ -10,20 +10,23 @@ import (
 )
 
 type SharingService struct {
-	shareRepo domain.SharingRepository
-	keysRepo  domain.UserKeysRepository
-	vaultRepo domain.VaultRepository
+	shareRepo  domain.SharingRepository
+	keysRepo   domain.UserKeysRepository
+	vaultRepo  domain.VaultRepository
+	familyRepo domain.FamilyRepository
 }
 
 func NewSharingService(
 	shareRepo domain.SharingRepository,
 	keysRepo domain.UserKeysRepository,
 	vaultRepo domain.VaultRepository,
+	familyRepo domain.FamilyRepository,
 ) *SharingService {
 	return &SharingService{
-		shareRepo: shareRepo,
-		keysRepo:  keysRepo,
-		vaultRepo: vaultRepo,
+		shareRepo:  shareRepo,
+		keysRepo:   keysRepo,
+		vaultRepo:  vaultRepo,
+		familyRepo: familyRepo,
 	}
 }
 
@@ -89,6 +92,15 @@ func (s *SharingService) ShareItem(ctx context.Context, ownerUserID string, item
 	// Prevent self-share
 	if input.RecipientID == ownerUserID {
 		return domain.ErrCannotShareWithSelf
+	}
+
+	// Verify family membership
+	isMember, err := s.familyRepo.IsFamilyMember(ctx, ownerUserID, input.RecipientID)
+	if err != nil {
+		return fmt.Errorf("check family membership: %w", err)
+	}
+	if !isMember {
+		return domain.ErrNotFamilyMember
 	}
 
 	if len(input.DEKWrapped) == 0 || len(input.WrapNonce) == 0 {
