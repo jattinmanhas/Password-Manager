@@ -6,6 +6,7 @@ import {
     Dices
 } from "lucide-react";
 import { useAuth } from "../../app/providers/AuthProvider";
+import { ThemeToggle } from "../ui/ThemeToggle";
 
 export function DashboardLayout() {
     const { logout, session } = useAuth();
@@ -199,31 +200,33 @@ export function DashboardLayout() {
                             </div>
                         )}
 
-                        <button 
-                            onClick={logout} 
-                            title="Sign Out"
-                            style={{ 
-                                display: "flex", alignItems: "center", justifyContent: "center", 
-                                color: "var(--color-text-subtle)", 
-                                padding: "0.5rem", 
-                                borderRadius: "0.5rem",
-                                transition: "all 0.15s",
-                                backgroundColor: "transparent",
-                                border: "none",
-                                cursor: "pointer",
-                                marginTop: isCollapsed ? "0.25rem" : 0
-                            }}
-                            onMouseEnter={(e) => {
-                                e.currentTarget.style.backgroundColor = "rgba(239, 68, 68, 0.08)";
-                                e.currentTarget.style.color = "#ef4444";
-                            }}
-                            onMouseLeave={(e) => {
-                                e.currentTarget.style.backgroundColor = "transparent";
-                                e.currentTarget.style.color = "var(--color-text-subtle)";
-                            }}
-                        >
-                            <LogOut size={18} />
-                        </button>
+                        <div style={{ display: "flex", flexDirection: isCollapsed ? "column" : "row", gap: "0.25rem", marginTop: isCollapsed ? "0.25rem" : 0 }}>
+                            {!isCollapsed && <ThemeToggle />}
+                            <button 
+                                onClick={logout} 
+                                title="Sign Out"
+                                style={{ 
+                                    display: "flex", alignItems: "center", justifyContent: "center", 
+                                    color: "var(--color-text-subtle)", 
+                                    padding: "0.5rem", 
+                                    borderRadius: "0.5rem",
+                                    transition: "all 0.15s",
+                                    backgroundColor: "transparent",
+                                    border: "none",
+                                    cursor: "pointer"
+                                }}
+                                onMouseEnter={(e) => {
+                                    e.currentTarget.style.backgroundColor = "rgba(239, 68, 68, 0.08)";
+                                    e.currentTarget.style.color = "#ef4444";
+                                }}
+                                onMouseLeave={(e) => {
+                                    e.currentTarget.style.backgroundColor = "transparent";
+                                    e.currentTarget.style.color = "var(--color-text-subtle)";
+                                }}
+                            >
+                                <LogOut size={18} />
+                            </button>
+                        </div>
                     </div>
 
                     {/* Desktop Collapse Toggle - Floating on border */}
@@ -283,22 +286,25 @@ export function DashboardLayout() {
                         <ShieldCheck size={20} className="text-blue" />
                         Family Vault
                     </div>
-                    <button 
-                        onClick={() => setIsMobileOpen(true)} 
-                        style={{ 
-                            color: "var(--color-security-blue)", 
-                            padding: "0.5rem",
-                            borderRadius: "0.5rem",
-                            backgroundColor: "rgba(37, 99, 235, 0.08)",
-                            display: "flex",
-                            alignItems: "center",
-                            justifyContent: "center",
-                            border: "none",
-                            cursor: "pointer"
-                        }}
-                    >
-                        <Menu size={24} />
-                    </button>
+                    <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
+                        <ThemeToggle />
+                        <button 
+                            onClick={() => setIsMobileOpen(true)} 
+                            style={{ 
+                                color: "var(--color-security-blue)", 
+                                padding: "0.5rem",
+                                borderRadius: "0.5rem",
+                                backgroundColor: "rgba(37, 99, 235, 0.08)",
+                                display: "flex",
+                                alignItems: "center",
+                                justifyContent: "center",
+                                border: "none",
+                                cursor: "pointer"
+                            }}
+                        >
+                            <Menu size={24} />
+                        </button>
+                    </div>
                 </div>
 
                 <main style={{ flex: 1, padding: "2rem", overflowY: "auto" }}>

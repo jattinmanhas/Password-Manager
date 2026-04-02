@@ -177,7 +177,7 @@ export function PasswordGenerator({ onUsePassword, onCancel, standalone = false 
       </div>
 
       <div className={cn("pwd-gen-container", standalone && "standalone")} style={{ 
-          backgroundColor: standalone ? "rgba(255,255,255,0.4)" : "transparent",
+          backgroundColor: standalone ? "var(--color-soft-gray)" : "transparent",
           border: standalone ? "1px solid var(--color-border)" : "none"
       }}>
         <div style={{ display: "flex", flexDirection: "column", gap: "0.75rem" }}>
@@ -186,11 +186,11 @@ export function PasswordGenerator({ onUsePassword, onCancel, standalone = false 
             <span style={{ 
                 fontSize: "1rem", 
                 fontWeight: "bold", 
-                color: "var(--color-security-blue)", 
-                backgroundColor: "var(--color-white)", 
+                color: "#ffffff", 
+                backgroundColor: "var(--color-security-blue)", 
                 padding: "0.25rem 0.75rem", 
                 borderRadius: "0.5rem", 
-                border: "1px solid var(--color-border)",
+                border: "none",
                 minWidth: "3rem", 
                 textAlign: "center" 
             }}>

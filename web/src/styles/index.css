@@ -17,6 +17,23 @@
   --radius-2xl: 1rem;
 }
 
+.dark {
+  --color-security-blue: #3B82F6;
+  --color-security-blue-hover: #60A5FA;
+  --color-soft-green: #34D399;
+  --color-amber: #FBBF24;
+  --color-soft-gray: #0F172A;
+  --color-red: #F87171;
+  --color-white: #1E293B;
+  --color-text-main: #F8FAFC;
+  --color-text-subtle: #94A3B8;
+  --color-text-light: #64748B;
+  --color-border: #475569;
+
+  --shadow-sm: 0 1px 2px 0 rgb(0 0 0 / 0.3);
+  --shadow-md: 0 4px 6px -1px rgb(0 0 0 / 0.4), 0 2px 4px -2px rgb(0 0 0 / 0.3);
+}
+
 * {
   box-sizing: border-box;
   margin: 0;

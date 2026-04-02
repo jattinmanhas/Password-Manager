@@ -204,9 +204,9 @@ export function Family() {
                       onClick={() => void handleReject(req.user_id)} 
                       style={{ width: "auto", transition: "all 0.15s" }}
                       onMouseEnter={(e) => {
-                        e.currentTarget.style.color = "#ef4444";
-                        e.currentTarget.style.borderColor = "#fecaca";
-                        e.currentTarget.style.background = "rgba(239,68,68,0.05)";
+                        e.currentTarget.style.color = "var(--color-red)";
+                        e.currentTarget.style.borderColor = "var(--color-red)";
+                        e.currentTarget.style.background = "rgba(239,68,68,0.1)";
                       }}
                       onMouseLeave={(e) => {
                         e.currentTarget.style.color = "";
@@ -272,7 +272,7 @@ export function Family() {
                        transition: "all 0.15s"
                      }}
                      title="Remove member"
-                     onMouseEnter={(e) => { e.currentTarget.style.color = "#ef4444"; e.currentTarget.style.background = "rgba(239,68,68,0.05)"; }}
+                     onMouseEnter={(e) => { e.currentTarget.style.color = "var(--color-red)"; e.currentTarget.style.background = "rgba(239,68,68,0.1)"; }}
                      onMouseLeave={(e) => { e.currentTarget.style.color = "var(--color-text-light)"; e.currentTarget.style.background = "transparent"; }}
                    >
                      <Trash2 size={16} />
@@ -304,9 +304,9 @@ export function Family() {
                     onClick={() => void handleCancelSent(req.user_id)} 
                     style={{ padding: "0.25rem 0.5rem", height: "auto", fontSize: "0.75rem", flexShrink: 0, width: "auto", transition: "all 0.15s" }}
                     onMouseEnter={(e) => {
-                      e.currentTarget.style.color = "#ef4444";
-                      e.currentTarget.style.borderColor = "#fecaca";
-                      e.currentTarget.style.background = "rgba(239,68,68,0.05)";
+                      e.currentTarget.style.color = "var(--color-red)";
+                      e.currentTarget.style.borderColor = "var(--color-red)";
+                      e.currentTarget.style.background = "rgba(239,68,68,0.1)";
                     }}
                     onMouseLeave={(e) => {
                       e.currentTarget.style.color = "";

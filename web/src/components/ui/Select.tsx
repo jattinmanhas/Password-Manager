@@ -62,7 +62,7 @@ export function Select({ options, value, onChange, placeholder = "Select option.
           border: isOpen ? "2px solid var(--color-security-blue)" : "2px solid var(--color-border)",
           borderRadius: "0.75rem",
           padding: "0.625rem 1rem",
-          backgroundColor: "#fff",
+          backgroundColor: "var(--color-white)",
           display: "flex",
           alignItems: "center",
           justifyContent: "space-between",
@@ -84,7 +84,7 @@ export function Select({ options, value, onChange, placeholder = "Select option.
             left: 0,
             right: 0,
             marginTop: "0.5rem",
-            backgroundColor: "#fff",
+            backgroundColor: "var(--color-white)",
             border: "1px solid var(--color-border)",
             borderRadius: "0.75rem",
             boxShadow: "0 10px 15px -3px rgba(0,0,0,0.1), 0 4px 6px -2px rgba(0,0,0,0.05)",
@@ -95,7 +95,7 @@ export function Select({ options, value, onChange, placeholder = "Select option.
           }}
         >
           {searchable && (
-            <div style={{ padding: "0.75rem", borderBottom: "1px solid var(--color-border)", display: "flex", alignItems: "center", gap: "0.5rem", position: "sticky", top: 0, background: "#fff", zIndex: 1 }}>
+            <div style={{ padding: "0.75rem", borderBottom: "1px solid var(--color-border)", display: "flex", alignItems: "center", gap: "0.5rem", position: "sticky", top: 0, background: "var(--color-white)", zIndex: 1 }}>
               <Search size={16} style={{ color: "var(--color-text-light)" }} />
               <input
                 ref={searchInputRef}
@@ -136,7 +136,7 @@ export function Select({ options, value, onChange, placeholder = "Select option.
                   transition: "background-color 0.1s",
                 }}
                 onMouseEnter={(e) => {
-                  if (value !== option.value) e.currentTarget.style.backgroundColor = "rgba(0,0,0,0.02)";
+                  if (value !== option.value) e.currentTarget.style.backgroundColor = "var(--color-soft-gray)";
                 }}
                 onMouseLeave={(e) => {
                   if (value !== option.value) e.currentTarget.style.backgroundColor = "transparent";

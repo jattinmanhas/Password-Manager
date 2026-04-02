@@ -7,16 +7,19 @@ import "./styles/index.css";
 
 import { DialogProvider } from "./app/providers/DialogProvider";
 import { VaultProvider } from "./app/providers/VaultProvider";
+import { ThemeProvider } from "./app/providers/ThemeProvider";
 
 createRoot(document.getElementById("root")!).render(
   <StrictMode>
-    <DialogProvider>
-      <AuthProvider>
-        <VaultProvider>
-          <Toaster position="top-center" />
-          <AppRouter />
-        </VaultProvider>
-      </AuthProvider>
-    </DialogProvider>
+    <ThemeProvider>
+      <DialogProvider>
+        <AuthProvider>
+          <VaultProvider>
+            <Toaster position="top-center" />
+            <AppRouter />
+          </VaultProvider>
+        </AuthProvider>
+      </DialogProvider>
+    </ThemeProvider>
   </StrictMode>
 );
