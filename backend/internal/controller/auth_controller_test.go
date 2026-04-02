@@ -138,7 +138,7 @@ func (m *mockAuthRepo) UpdatePassword(ctx context.Context, input domain.ResetPas
 }
 
 func setupController(repo *mockAuthRepo) *controller.AuthController {
-	svc := service.NewAuthService(repo, "pepper-test", time.Hour, "issuer")
+	svc := service.NewAuthService(repo, nil, "pepper-test", time.Hour, "issuer")
 	return controller.NewAuthController(svc, controller.AuthCookieConfig{
 		Name:   "pmv2_session",
 		Secure: false,

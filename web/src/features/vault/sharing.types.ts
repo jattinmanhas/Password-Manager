@@ -65,3 +65,17 @@ export interface SharedItemResponse {
 export interface SharedItemsResponse {
   items: SharedItemResponse[];
 }
+
+export interface SentShareResponse {
+  item_id: string;
+  item_title: string;
+  recipient_id: string;
+  recipient_email: string;
+  recipient_name: string;
+  permissions: string;
+  created_at: string;
+}
+
+export interface SentSharesResponse {
+  shares: SentShareResponse[];
+}

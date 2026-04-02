@@ -7,6 +7,7 @@ import type {
   ShareItemResponse,
   ShareRecipientsResponse,
   SharedItemsResponse,
+  SentSharesResponse,
 } from "../sharing.types";
 
 export const sharingService = {
@@ -46,5 +47,8 @@ export const sharingService = {
       "GET",
       `/vault/items/${itemId}/shares`
     );
+  },
+  listSentShares() {
+    return request<SentSharesResponse>("GET", "/vault/shared/sent");
   },
 };

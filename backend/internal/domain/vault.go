@@ -15,6 +15,7 @@ type VaultItem struct {
 	WrapNonce   []byte
 	AlgoVersion string
 	Metadata    []byte
+	IsShared    bool
 	CreatedAt   time.Time
 	UpdatedAt   time.Time
 }

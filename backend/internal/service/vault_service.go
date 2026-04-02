@@ -7,15 +7,18 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/google/uuid"
+
 	"pmv2/backend/internal/domain"
 )
 
 type VaultService struct {
-	repo domain.VaultRepository
+	repo  domain.VaultRepository
+	audit *AuditService
 }
 
-func NewVaultService(repo domain.VaultRepository) *VaultService {
-	return &VaultService{repo: repo}
+func NewVaultService(repo domain.VaultRepository, audit *AuditService) *VaultService {
+	return &VaultService{repo: repo, audit: audit}
 }
 
 func (s *VaultService) CreateItem(ctx context.Context, userID string, input domain.CreateVaultItemInput) (domain.VaultItem, error) {
@@ -33,6 +36,12 @@ func (s *VaultService) CreateItem(ctx context.Context, userID string, input doma
 	if err != nil {
 		return domain.VaultItem{}, fmt.Errorf("create vault item: %w", err)
 	}
+
+	uid, _ := uuid.Parse(ownerUserID)
+	s.audit.LogEvent(ctx, &uid, domain.EventTypeVaultItemCreated, map[string]string{
+		"item_id": item.ID,
+	})
+
 	return item, nil
 }
 
@@ -90,6 +99,12 @@ func (s *VaultService) UpdateItem(ctx context.Context, userID string, itemID str
 		}
 		return domain.VaultItem{}, fmt.Errorf("update vault item: %w", err)
 	}
+
+	uid, _ := uuid.Parse(ownerUserID)
+	s.audit.LogEvent(ctx, &uid, domain.EventTypeVaultItemUpdated, map[string]string{
+		"item_id": trimmedItemID,
+	})
+
 	return item, nil
 }
 
@@ -110,6 +125,12 @@ func (s *VaultService) DeleteItem(ctx context.Context, userID string, itemID str
 	if !deleted {
 		return domain.ErrNotFound
 	}
+
+	uid, _ := uuid.Parse(ownerUserID)
+	s.audit.LogEvent(ctx, &uid, domain.EventTypeVaultItemDeleted, map[string]string{
+		"item_id": trimmedItemID,
+	})
+
 	return nil
 }
 

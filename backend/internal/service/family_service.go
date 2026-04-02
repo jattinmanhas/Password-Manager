@@ -5,21 +5,29 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/google/uuid"
+
 	"pmv2/backend/internal/domain"
 )
 
 type FamilyService struct {
-	familyRepo domain.FamilyRepository
-	authRepo   domain.AuthRepository
+	familyRepo     domain.FamilyRepository
+	authRepo       domain.AuthRepository
+	sharingService *SharingService
+	audit          *AuditService
 }
 
 func NewFamilyService(
 	familyRepo domain.FamilyRepository,
 	authRepo domain.AuthRepository,
+	sharingService *SharingService,
+	audit *AuditService,
 ) *FamilyService {
 	return &FamilyService{
-		familyRepo: familyRepo,
-		authRepo:   authRepo,
+		familyRepo:     familyRepo,
+		authRepo:       authRepo,
+		sharingService: sharingService,
+		audit:          audit,
 	}
 }
 
@@ -53,7 +61,14 @@ func (s *FamilyService) SendRequest(ctx context.Context, senderUserID, recipient
 		return domain.ErrFamilyRequestAlreadySent
 	}
 
-	return s.familyRepo.CreateRequest(ctx, senderUserID, recipient.UserID)
+	err = s.familyRepo.CreateRequest(ctx, senderUserID, recipient.UserID)
+	if err == nil {
+		uid, _ := uuid.Parse(senderUserID)
+		s.audit.LogEvent(ctx, &uid, domain.EventTypeFamilyInviteSent, map[string]interface{}{
+			"friend_email": normalizedEmail,
+		})
+	}
+	return err
 }
 
 // AcceptRequest accepts a pending family request.
@@ -64,7 +79,14 @@ func (s *FamilyService) AcceptRequest(ctx context.Context, currentUserID, sender
 	if strings.TrimSpace(senderUserID) == "" {
 		return domain.ErrFamilyRequestNotFound
 	}
-	return s.familyRepo.AcceptRequest(ctx, currentUserID, senderUserID)
+	err := s.familyRepo.AcceptRequest(ctx, currentUserID, senderUserID)
+	if err == nil {
+		uid, _ := uuid.Parse(currentUserID)
+		s.audit.LogEvent(ctx, &uid, domain.EventTypeFamilyInviteAccepted, map[string]interface{}{
+			"friend_id": senderUserID,
+		})
+	}
+	return err
 }
 
 // RejectRequest rejects / cancels a pending family request (or removes a member).
@@ -75,6 +97,13 @@ func (s *FamilyService) RejectRequest(ctx context.Context, currentUserID, otherU
 	if strings.TrimSpace(otherUserID) == "" {
 		return domain.ErrFamilyRequestNotFound
 	}
+
+	// If they are already members, we revoke all shared items
+	isMember, _ := s.familyRepo.IsFamilyMember(ctx, currentUserID, otherUserID)
+	if isMember {
+		_ = s.sharingService.RevokeAllSharesBetweenUsers(ctx, currentUserID, otherUserID)
+	}
+
 	return s.familyRepo.DeleteMembership(ctx, currentUserID, otherUserID)
 }
 
@@ -86,7 +115,18 @@ func (s *FamilyService) RemoveMember(ctx context.Context, currentUserID, memberU
 	if strings.TrimSpace(memberUserID) == "" {
 		return domain.ErrNotFound
 	}
-	return s.familyRepo.DeleteMembership(ctx, currentUserID, memberUserID)
+
+	// Revoke all shared items before removing membership
+	_ = s.sharingService.RevokeAllSharesBetweenUsers(ctx, currentUserID, memberUserID)
+
+	err := s.familyRepo.DeleteMembership(ctx, currentUserID, memberUserID)
+	if err == nil {
+		uid, _ := uuid.Parse(currentUserID)
+		s.audit.LogEvent(ctx, &uid, domain.EventTypeFamilyMemberRemoved, map[string]interface{}{
+			"friend_id": memberUserID,
+		})
+	}
+	return err
 }
 
 // ListMembers returns accepted family members.

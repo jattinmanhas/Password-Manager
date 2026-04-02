@@ -67,3 +67,17 @@ type SharedItemResponse struct {
 type SharedItemsResponse struct {
 	Items []SharedItemResponse `json:"items"`
 }
+
+type SentShareResponse struct {
+	ItemID         string `json:"item_id"`
+	ItemTitle      string `json:"item_title"`
+	RecipientID    string `json:"recipient_id"`
+	RecipientEmail string `json:"recipient_email"`
+	RecipientName  string `json:"recipient_name"`
+	Permissions    string `json:"permissions"`
+	CreatedAt      string `json:"created_at"`
+}
+
+type SentSharesResponse struct {
+	Shares []SentShareResponse `json:"shares"`
+}

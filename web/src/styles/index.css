@@ -10,28 +10,68 @@
   --color-text-subtle: #64748B;
   --color-text-light: #94A3B8;
   --color-border: #E2E8F0;
+  
+  /* Security Ledger Palette */
+  --color-emerald: #10B981;
+  --color-emerald-subtle: rgba(16, 185, 129, 0.1);
+  --color-rose: #F43F5E;
+  --color-rose-subtle: rgba(244, 63, 94, 0.1);
+  --color-blue: #3B82F6;
+  --color-blue-subtle: rgba(59, 130, 246, 0.1);
+  --color-amber-subtle: rgba(245, 158, 11, 0.1);
+
+  --color-bg-base: var(--color-soft-gray);
 
   --shadow-sm: 0 1px 2px 0 rgb(0 0 0 / 0.05);
   --shadow-md: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
   --radius-xl: 0.75rem;
   --radius-2xl: 1rem;
+  --color-bg-gradient: none;
 }
 
 .dark {
-  --color-security-blue: #3B82F6;
-  --color-security-blue-hover: #60A5FA;
-  --color-soft-green: #34D399;
-  --color-amber: #FBBF24;
-  --color-soft-gray: #0F172A;
-  --color-red: #F87171;
-  --color-white: #1E293B;
-  --color-text-main: #F8FAFC;
-  --color-text-subtle: #94A3B8;
-  --color-text-light: #64748B;
-  --color-border: #475569;
+  /* 🎯 Neutral Backgrounds (Zinc/Neutral) */
+  --color-bg-main: #09090B;        /* main app background */
+  --color-bg-surface: #18181B;     /* cards */
+  --color-bg-elevated: #27272A;    /* modals / hover */
 
-  --shadow-sm: 0 1px 2px 0 rgb(0 0 0 / 0.3);
-  --shadow-md: 0 4px 6px -1px rgb(0 0 0 / 0.4), 0 2px 4px -2px rgb(0 0 0 / 0.3);
+  /* 🎯 Brand Colors (Sophisticated) */
+  --color-security-blue: #3B82F6;
+  --color-security-blue-hover: #2563EB;
+
+  --color-soft-green: #10B981;
+  --color-amber: #F59E0B;
+  --color-red: #EF4444;
+
+  /* 🎯 Text (Zinc-50, 400, 500) */
+  --color-text-main: #FAFAFA;
+  --color-text-subtle: #A1A1AA;
+  --color-text-light: #71717A;
+
+  /* 🎯 Borders */
+  --color-border: #27272A;
+
+  /* Security Ledger Palette (Dark) */
+  --color-emerald: #10B981;
+  --color-emerald-subtle: rgba(16, 185, 129, 0.15);
+  --color-rose: #FB7185;
+  --color-rose-subtle: rgba(251, 113, 133, 0.15);
+  --color-blue: #60A5FA;
+  --color-blue-subtle: rgba(96, 165, 250, 0.15);
+  --color-amber-subtle: rgba(245, 158, 11, 0.15);
+
+  --color-bg-base: var(--color-bg-main);
+
+  /* 🎯 Replace old ones */
+  --color-soft-gray: var(--color-bg-main);
+  --color-white: var(--color-bg-surface);
+
+  /* 🎯 Shadows (Sophisticated & Deep) */
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.5);
+  --shadow-md: 0 12px 24px -4px rgba(0, 0, 0, 0.6);
+
+  /* 🎯 Gradients */
+  --color-bg-gradient: radial-gradient(circle at top, #242427 0%, #09090B 100%);
 }
 
 * {
@@ -43,8 +83,11 @@
 body {
   font-family: "Inter", "Segoe UI", -apple-system, BlinkMacSystemFont, "Helvetica Neue", Arial, sans-serif;
   background-color: var(--color-soft-gray);
+  background-image: var(--color-bg-gradient);
+  background-attachment: fixed;
   color: var(--color-text-main);
   -webkit-font-smoothing: antialiased;
+  min-height: 100vh;
 }
 
 a {
@@ -400,7 +443,7 @@ ul {
   left: 0;
   right: 0;
   bottom: 0;
-  background-color: rgba(15, 23, 42, 0.4);
+  background-color: rgba(0, 0, 0, 0.6);
   backdrop-filter: blur(4px);
   display: flex;
   align-items: flex-start;

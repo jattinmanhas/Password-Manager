@@ -7,6 +7,8 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/google/uuid"
+
 	"pmv2/backend/internal/domain"
 	"pmv2/backend/internal/util"
 )
@@ -18,9 +20,10 @@ type AuthService struct {
 	totpIssuer    string
 	totpSecretKey []byte
 	now           func() time.Time
+	audit         *AuditService
 }
 
-func NewAuthService(repo domain.AuthRepository, pepper string, sessionTTL time.Duration, issuer string) *AuthService {
+func NewAuthService(repo domain.AuthRepository, audit *AuditService, pepper string, sessionTTL time.Duration, issuer string) *AuthService {
 	return &AuthService{
 		repo:          repo,
 		pepper:        pepper,
@@ -28,6 +31,7 @@ func NewAuthService(repo domain.AuthRepository, pepper string, sessionTTL time.D
 		totpIssuer:    issuer,
 		totpSecretKey: util.DeriveTOTPEncryptionKey(pepper),
 		now:           time.Now,
+		audit:         audit,
 	}
 }
 
@@ -175,6 +179,12 @@ func (s *AuthService) Login(ctx context.Context, input domain.LoginInput) (domai
 		return domain.LoginOutput{}, fmt.Errorf("create session: %w", err)
 	}
 
+	uid, _ := uuid.Parse(record.UserID)
+	s.audit.LogEvent(ctx, &uid, domain.EventTypeAuthLoginSuccess, map[string]string{
+		"ip_address":  input.IPAddr,
+		"device_name": input.DeviceName,
+	})
+
 	return domain.LoginOutput{
 		SessionToken: sessionToken,
 		ExpiresAt:    expiresAt,
@@ -206,13 +216,26 @@ func (s *AuthService) Logout(ctx context.Context, token string) error {
 		return domain.ErrUnauthorizedSession
 	}
 
-	revoked, err := s.repo.RevokeSessionByTokenHash(ctx, util.HashToken(token, s.pepper))
+	tokenHash := util.HashToken(token, s.pepper)
+	session, err := s.repo.GetActiveSessionByTokenHash(ctx, tokenHash)
+	if err != nil {
+		if errors.Is(err, domain.ErrNotFound) {
+			return domain.ErrUnauthorizedSession
+		}
+		return fmt.Errorf("lookup session for logout: %w", err)
+	}
+
+	revoked, err := s.repo.RevokeSessionByTokenHash(ctx, tokenHash)
 	if err != nil {
 		return fmt.Errorf("logout: %w", err)
 	}
 	if !revoked {
 		return domain.ErrUnauthorizedSession
 	}
+
+	uid, _ := uuid.Parse(session.UserID)
+	s.audit.LogEvent(ctx, &uid, domain.EventTypeAuthLogout, nil)
+
 	return nil
 }
 
@@ -331,6 +354,12 @@ func (s *AuthService) recordMFAFailure(ctx context.Context, userID string, now t
 		}
 		return fmt.Errorf("record totp failure: %w", err)
 	}
+
+	uid, _ := uuid.Parse(userID)
+	s.audit.LogEvent(ctx, &uid, domain.EventTypeAuthLoginFailed, map[string]string{
+		"reason": "mfa_verification_failed",
+	})
+
 	if s.isMFALocked(lockedUntil, now) {
 		return domain.ErrMFARateLimited
 	}

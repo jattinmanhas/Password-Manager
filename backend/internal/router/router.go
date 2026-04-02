@@ -61,11 +61,12 @@ func (g routeGroup) Handle(method string, path string, handler http.HandlerFunc,
 	g.mux.HandleFunc(pattern, handler)
 }
 
-func NewRouter(cfg config.Config, logger *slog.Logger, authService *service.AuthService, vaultService *service.VaultService, folderService *service.FolderService, sharingService *service.SharingService, familyService *service.FamilyService) http.Handler {
+func NewRouter(cfg config.Config, logger *slog.Logger, auditService *service.AuditService, authService *service.AuthService, vaultService *service.VaultService, folderService *service.FolderService, sharingService *service.SharingService, familyService *service.FamilyService) http.Handler {
 	authController := controller.NewAuthController(authService, controller.AuthCookieConfig{
 		Name:   cfg.SessionCookieName,
 		Secure: isProductionEnv(cfg.Env),
 	}, logger)
+	auditController := controller.NewAuditController(auditService, logger)
 	vaultController := controller.NewVaultController(vaultService, logger)
 	folderController := controller.NewFolderController(folderService, logger)
 	sharingController := controller.NewSharingController(sharingService, logger)
@@ -81,6 +82,7 @@ func NewRouter(cfg config.Config, logger *slog.Logger, authService *service.Auth
 	folders := v1.Group("/folders")
 	users := v1.Group("/users")
 	family := v1.Group("/family")
+	audit := v1.Group("/audit")
 
 	// Health check
 	root.Handle(http.MethodGet, "/healthz", func(w http.ResponseWriter, r *http.Request) {
@@ -128,6 +130,7 @@ func NewRouter(cfg config.Config, logger *slog.Logger, authService *service.Auth
 
 	// Sharing routes
 	vault.Handle(http.MethodGet, "/shared", authMiddleware.WithSession(sharingController.HandleListSharedWithMe))
+	vault.Handle(http.MethodGet, "/shared/sent", authMiddleware.WithSession(sharingController.HandleListSentShares))
 	vault.Handle(http.MethodPost, "/items/{item_id}/shares", authMiddleware.WithSession(sharingController.HandleShareItem))
 	vault.Handle(http.MethodGet, "/items/{item_id}/shares", authMiddleware.WithSession(sharingController.HandleListSharesForItem))
 	vault.Handle(http.MethodDelete, "/items/{item_id}/shares/{user_id}", authMiddleware.WithSession(sharingController.HandleRevokeShare))
@@ -144,6 +147,11 @@ func NewRouter(cfg config.Config, logger *slog.Logger, authService *service.Auth
 	family.Handle(http.MethodGet, "", authMiddleware.WithSession(familyController.HandleListMembers))
 	family.Handle(http.MethodGet, "/requests", authMiddleware.WithSession(familyController.HandleListRequests))
 	family.Handle(http.MethodDelete, "/{user_id}", authMiddleware.WithSession(familyController.HandleRemoveMember))
+
+	// Audit routes
+	audit.Handle(http.MethodGet, "", authMiddleware.WithSession(auditController.HandleGetLogs))
+	audit.Handle(http.MethodGet, "/summary", authMiddleware.WithSession(auditController.HandleGetSummary))
+	audit.Handle(http.MethodDelete, "", authMiddleware.WithSession(auditController.HandleClearLogs))
 
 	root.Handle("", "/", func(w http.ResponseWriter, r *http.Request) {
 		util.WriteJSON(w, http.StatusNotFound, dto.ErrorResponse{Error: "not_found", Message: "route not found"})

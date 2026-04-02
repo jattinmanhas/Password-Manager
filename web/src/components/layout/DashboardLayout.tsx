@@ -3,7 +3,7 @@ import { Outlet, Link, useLocation } from "react-router-dom";
 import { 
     LayoutDashboard, Key, Users, ShieldCheck, Activity, Settings, 
     LogOut, Menu, X, ChevronLeft, ChevronRight, User as UserIcon,
-    Dices
+    Dices, Share2
 } from "lucide-react";
 import { useAuth } from "../../app/providers/AuthProvider";
 import { ThemeToggle } from "../ui/ThemeToggle";
@@ -31,20 +31,20 @@ export function DashboardLayout() {
         { name: "Dashboard", path: "/dashboard", icon: LayoutDashboard },
         { name: "Vault", path: "/vault", icon: Key },
         { name: "Generator", path: "/generator", icon: Dices },
-        { name: "Shared Vaults", path: "/shared", icon: Users },
+        { name: "Shared with Me", path: "/shared", icon: Users },
+        { name: "Shared by Me", path: "/shared/sent", icon: Share2 },
         { name: "Activity", path: "/activity", icon: Activity },
     ];
 
     const secondaryNav = [
         { name: "Family Members", path: "/family", icon: Users },
-        { name: "Setup Recovery", path: "/recovery-setup", icon: ShieldCheck },
-        { name: "Setup 2FA", path: "/setup-2fa", icon: ShieldCheck },
         { name: "Settings", path: "/settings", icon: Settings },
     ];
 
     const isActive = (path: string) => {
-        if (path === "/dashboard" && location.pathname === "/dashboard") return true;
-        if (path !== "/dashboard" && location.pathname.startsWith(path)) return true;
+        if (location.pathname === path) return true;
+        // For subpaths like /vault/{id}, we still want /vault to be active
+        if (path !== "/dashboard" && path !== "/shared" && location.pathname.startsWith(path)) return true;
         return false;
     };
 

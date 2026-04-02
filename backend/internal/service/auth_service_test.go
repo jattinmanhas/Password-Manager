@@ -144,7 +144,7 @@ func (m *mockAuthRepo) UpdatePassword(ctx context.Context, input domain.ResetPas
 }
 
 func newTestAuthService(repo *mockAuthRepo) *service.AuthService {
-	return service.NewAuthService(repo, "pepper123", time.Hour, "Test Issuer")
+	return service.NewAuthService(repo, nil, "pepper123", time.Hour, "Test Issuer")
 }
 
 func TestRegister_Success(t *testing.T) {

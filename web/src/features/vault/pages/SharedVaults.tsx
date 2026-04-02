@@ -404,6 +404,7 @@ export function SharedVaults() {
           size="sm"
           onClick={() => void loadSharedItems()}
           disabled={loading}
+          style={{ width: "fit-content" }}
         >
           <RefreshCw size={15} style={{ marginRight: "0.375rem", animation: loading ? "spin 1s linear infinite" : "none" }} />
           Refresh

@@ -48,6 +48,7 @@ export interface VaultViewItem {
   vaultId: string;
   vaultName: string;
   vaultType: VaultType;
+  isShared?: boolean;
 }
 
 export interface VaultFolder {

@@ -6,6 +6,7 @@ import { useAuth } from "../../../app/providers/AuthProvider";
 import { familyService } from "../services/family.service";
 import { Button } from "../../../components/ui/Button";
 import { Input } from "../../../components/ui/Input";
+import { Dialog } from "../../../components/ui/Dialog";
 import type { FamilyMember, FamilyRequest } from "../family.types";
 
 export function Family() {
@@ -19,6 +20,14 @@ export function Family() {
   const [emailToInvite, setEmailToInvite] = useState("");
   const [sendingRequest, setSendingRequest] = useState(false);
   const [sendError, setSendError] = useState("");
+
+  // Confirmation Modal State
+  const [confirmDelete, setConfirmDelete] = useState<{ isOpen: boolean; userId: string; name: string }>({
+    isOpen: false,
+    userId: "",
+    name: "",
+  });
+  const [isDeleting, setIsDeleting] = useState(false);
 
   const loadData = useCallback(async () => {
     setLoading(true);
@@ -95,16 +104,24 @@ export function Family() {
     }
   };
 
-  const handleRemoveMember = async (userId: string, name: string) => {
-    if (!confirm(`Are you sure you want to remove ${name || "this user"} from your family? They will no longer be able to share items with you.`)) {
-        return;
-    }
+  const handleRemoveMember = (userId: string, name: string) => {
+    setConfirmDelete({ isOpen: true, userId, name });
+  };
+
+  const executeRemoveMember = async () => {
+    const { userId } = confirmDelete;
+    if (!userId) return;
+
+    setIsDeleting(true);
     try {
       await familyService.removeMember(userId);
       toast.success("Family member removed");
+      setConfirmDelete({ isOpen: false, userId: "", name: "" });
       await loadData();
     } catch (err: any) {
       toast.error(err?.message || "Failed to remove member");
+    } finally {
+      setIsDeleting(false);
     }
   };
 
@@ -323,6 +340,19 @@ export function Family() {
         )}
 
       </div>
+
+      <Dialog
+        isOpen={confirmDelete.isOpen}
+        onClose={() => setConfirmDelete({ ...confirmDelete, isOpen: false })}
+        title="Remove Family Member"
+        description={`Are you sure you want to remove ${confirmDelete.name || "this user"} from your family? They will no longer be able to share items with you.`}
+        confirmLabel="Remove"
+        cancelLabel="Keep"
+        onConfirm={() => void executeRemoveMember()}
+        type="confirm"
+        isLoading={isDeleting}
+      />
+
       <style>{`
         @keyframes spin {
           from { transform: rotate(0deg); }

@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/google/uuid"
+
 	"pmv2/backend/internal/domain"
 )
 
@@ -14,6 +16,7 @@ type SharingService struct {
 	keysRepo   domain.UserKeysRepository
 	vaultRepo  domain.VaultRepository
 	familyRepo domain.FamilyRepository
+	audit      *AuditService
 }
 
 func NewSharingService(
@@ -21,12 +24,14 @@ func NewSharingService(
 	keysRepo domain.UserKeysRepository,
 	vaultRepo domain.VaultRepository,
 	familyRepo domain.FamilyRepository,
+	audit *AuditService,
 ) *SharingService {
 	return &SharingService{
 		shareRepo:  shareRepo,
 		keysRepo:   keysRepo,
 		vaultRepo:  vaultRepo,
 		familyRepo: familyRepo,
+		audit:      audit,
 	}
 }
 
@@ -120,6 +125,14 @@ func (s *SharingService) ShareItem(ctx context.Context, ownerUserID string, item
 		}
 		return fmt.Errorf("create share: %w", err)
 	}
+
+	uid, _ := uuid.Parse(ownerUserID)
+	s.audit.LogEvent(ctx, &uid, domain.EventTypeSharingItemShared, map[string]interface{}{
+		"item_id":     itemID,
+		"friend_id":   input.RecipientID,
+		"permissions": input.Permissions,
+	})
+
 	return nil
 }
 
@@ -142,6 +155,13 @@ func (s *SharingService) RevokeShare(ctx context.Context, ownerUserID string, it
 	if err != nil {
 		return fmt.Errorf("delete share: %w", err)
 	}
+
+	uid, _ := uuid.Parse(ownerUserID)
+	s.audit.LogEvent(ctx, &uid, domain.EventTypeSharingRevoked, map[string]interface{}{
+		"item_id":   itemID,
+		"friend_id": recipientUserID,
+	})
+
 	return nil
 }
 
@@ -177,4 +197,22 @@ func (s *SharingService) ListSharesForItem(ctx context.Context, ownerUserID stri
 		return nil, fmt.Errorf("list shares for item: %w", err)
 	}
 	return shares, nil
+}
+
+func (s *SharingService) ListSentShares(ctx context.Context, userID string) ([]domain.SentShare, error) {
+	if strings.TrimSpace(userID) == "" {
+		return nil, domain.ErrUnauthorizedSession
+	}
+	shares, err := s.shareRepo.ListSentShares(ctx, userID)
+	if err != nil {
+		return nil, fmt.Errorf("list sent shares: %w", err)
+	}
+	return shares, nil
+}
+
+func (s *SharingService) RevokeAllSharesBetweenUsers(ctx context.Context, user1ID, user2ID string) error {
+	if strings.TrimSpace(user1ID) == "" || strings.TrimSpace(user2ID) == "" {
+		return nil // or error
+	}
+	return s.shareRepo.DeleteAllSharesBetweenUsers(ctx, user1ID, user2ID)
 }

@@ -19,7 +19,7 @@ const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
                     variant === "primary" && "btn-primary",
                     variant === "ghost" && "btn-ghost",
                     variant === "outline" && "btn-outline",
-                    size === "sm" && "px-3 py-1 text-sm h-8",
+                    size === "sm" && "px-3 py-1 text-sm h-8 w-max",
                     size === "icon" && "p-2 h-10 w-10 flex items-center justify-center",
                     className
                 )}

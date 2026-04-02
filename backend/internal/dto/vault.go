@@ -31,6 +31,7 @@ type VaultItemResponse struct {
 	WrapNonce   string          `json:"wrap_nonce"`
 	AlgoVersion string          `json:"algo_version"`
 	Metadata    json.RawMessage `json:"metadata,omitempty"`
+	IsShared    bool            `json:"is_shared"`
 	CreatedAt   string          `json:"created_at"`
 	UpdatedAt   string          `json:"updated_at"`
 }

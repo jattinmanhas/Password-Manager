@@ -282,78 +282,95 @@ export function ShareItemModal({ item, kek, aead, userPrivateKey, onClose }: Sha
                 </div>
               ) : (
                 <div style={{ display: "flex", flexDirection: "column", gap: "0.75rem" }}>
-                  {recipients.map((r) => (
-                    <div
-                      key={r.user_id}
-                      style={{
-                        display: "flex",
-                        alignItems: "center",
-                        justifyContent: "space-between",
-                        padding: "0.875rem 1rem",
-                        borderRadius: "var(--radius-xl)",
-                        backgroundColor: "white",
-                        border: "1px solid var(--color-border)",
-                        boxShadow: "0 1px 2px rgba(0,0,0,0.02)",
-                        transition: "all 0.2s"
-                      }}
-                    >
-                      <div style={{ display: "flex", alignItems: "center", gap: "0.75rem" }}>
-                        <div style={{ 
-                          width: "2rem", 
-                          height: "2rem", 
-                          borderRadius: "50%", 
-                          backgroundColor: "var(--color-soft-gray)", 
-                          display: "flex", 
-                          alignItems: "center", 
-                          justifyContent: "center",
-                          fontSize: "0.75rem",
-                          fontWeight: 600,
-                          color: "var(--color-security-blue)"
-                         }}>
-                          {r.user_id.slice(0, 2).toUpperCase()}
-                        </div>
-                        <div style={{ display: "flex", flexDirection: "column" }}>
-                          <span style={{ fontSize: "0.875rem", fontWeight: 600, color: "var(--color-text-main)" }}>
-                            {r.user_id.slice(0, 12)}...
-                          </span>
-                          <span
-                            style={{
-                              fontSize: "0.75rem",
-                              color: "var(--color-text-subtle)",
-                              textTransform: "capitalize",
-                            }}
-                          >
-                            {r.permissions} access
-                          </span>
-                        </div>
-                      </div>
-                      <button
-                        onClick={() => void handleRevoke(r.user_id)}
+                  {recipients.map((r) => {
+                    const member = familyMembers.find(m => m.user_id === r.user_id);
+                    const label = member?.name || member?.email || `User #${r.user_id.slice(0, 8)}`;
+                    const subLabel = member?.name ? member.email : (member?.email ? "" : "External user");
+                    const initials = (member?.name || member?.email || "??").slice(0, 2).toUpperCase();
+
+                    return (
+                      <div
+                        key={r.user_id}
                         style={{
-                          background: "none",
-                          border: "none",
-                          cursor: "pointer",
-                          color: "var(--color-text-light)",
-                          padding: "0.5rem",
-                          borderRadius: "var(--radius-xl)",
                           display: "flex",
                           alignItems: "center",
+                          justifyContent: "space-between",
+                          padding: "1rem",
+                          borderRadius: "var(--radius-xl)",
+                          backgroundColor: "var(--color-white)",
+                          border: "1px solid var(--color-border)",
+                          boxShadow: "0 1px 2px rgba(0,0,0,0.02)",
                           transition: "all 0.2s"
                         }}
-                        onMouseOver={(e) => {
-                          e.currentTarget.style.color = "var(--color-red)";
-                          e.currentTarget.style.backgroundColor = "rgba(239, 68, 68, 0.05)";
-                        }}
-                        onMouseOut={(e) => {
-                          e.currentTarget.style.color = "var(--color-text-light)";
-                          e.currentTarget.style.backgroundColor = "transparent";
-                        }}
-                        title="Revoke access"
                       >
-                        <Trash2 size={16} />
-                      </button>
-                    </div>
-                  ))}
+                        <div style={{ display: "flex", alignItems: "center", gap: "0.75rem" }}>
+                          <div style={{ 
+                            width: "2.5rem", 
+                            height: "2.5rem", 
+                            borderRadius: "50%", 
+                            backgroundColor: "var(--color-soft-gray)", 
+                            display: "flex", 
+                            alignItems: "center", 
+                            justifyContent: "center",
+                            fontSize: "0.8125rem",
+                            fontWeight: 600,
+                            color: "var(--color-security-blue)"
+                           }}>
+                            {initials}
+                          </div>
+                          <div style={{ display: "flex", flexDirection: "column" }}>
+                            <span style={{ fontSize: "0.875rem", fontWeight: 600, color: "var(--color-text-main)" }}>
+                              {label}
+                            </span>
+                            <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
+                              {subLabel && (
+                                <span style={{ fontSize: "0.75rem", color: "var(--color-text-subtle)" }}>
+                                  {subLabel}
+                                </span>
+                              )}
+                              <span
+                                style={{
+                                  fontSize: "0.6875rem",
+                                  color: "var(--color-text-light)",
+                                  background: "rgba(37, 99, 235, 0.05)",
+                                  padding: "0.125rem 0.375rem",
+                                  borderRadius: "0.25rem",
+                                  textTransform: "capitalize",
+                                }}
+                              >
+                                {r.permissions}
+                              </span>
+                            </div>
+                          </div>
+                        </div>
+                        <button
+                          onClick={() => void handleRevoke(r.user_id)}
+                          style={{
+                            background: "none",
+                            border: "none",
+                            cursor: "pointer",
+                            color: "var(--color-text-light)",
+                            padding: "0.5rem",
+                            borderRadius: "var(--radius-xl)",
+                            display: "flex",
+                            alignItems: "center",
+                            transition: "all 0.2s"
+                          }}
+                          onMouseOver={(e) => {
+                            e.currentTarget.style.color = "var(--color-red)";
+                            e.currentTarget.style.backgroundColor = "rgba(239, 68, 68, 0.05)";
+                          }}
+                          onMouseOut={(e) => {
+                            e.currentTarget.style.color = "var(--color-text-light)";
+                            e.currentTarget.style.backgroundColor = "transparent";
+                          }}
+                          title="Revoke access"
+                        >
+                          <Trash2 size={16} />
+                        </button>
+                      </div>
+                    );
+                  })}
                 </div>
               )}
             </div>

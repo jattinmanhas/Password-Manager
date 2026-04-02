@@ -7,6 +7,7 @@ export interface VaultItemResponse {
   wrap_nonce: string;
   algo_version: string;
   metadata?: unknown;
+  is_shared: boolean;
   created_at: string;
   updated_at: string;
 }

@@ -155,6 +155,7 @@ export function Vault() {
           updatedAt: item.updated_at,
           secret: normalizeSecret(JSON.parse(plaintext)),
           isCorrupted: false,
+          isShared: item.is_shared,
           ...vaultRef,
         };
       } catch {
@@ -857,15 +858,18 @@ export function Vault() {
           </div>
           </div>
 
-          <div style={{ display: "flex", gap: "0.75rem" }}>
+          <div style={{ display: "flex", gap: "0.75rem", flexShrink: 0, alignItems: "center" }}>
             <Button
               variant="outline"
               onClick={() => lockVault()}
-              style={{ gap: "0.5rem" }}
+              style={{ gap: "0.5rem", whiteSpace: "nowrap" }}
             >
               🔒 Lock
             </Button>
-            <Button onClick={openCreateItemModal} style={{ gap: "0.5rem" }}>
+            <Button 
+              onClick={openCreateItemModal} 
+              style={{ gap: "0.5rem", whiteSpace: "nowrap" }}
+            >
               <Plus size={18} />
               Add Item
             </Button>

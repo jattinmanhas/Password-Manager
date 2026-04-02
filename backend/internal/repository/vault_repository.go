@@ -31,7 +31,9 @@ func (r *VaultRepository) CreateVaultItem(ctx context.Context, input domain.Crea
 			id, owner_user_id, folder_id, ciphertext, nonce, dek_wrapped, wrap_nonce, algo_version, metadata, created_at, updated_at
 		)
 		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, NOW(), NOW())
-		RETURNING id, owner_user_id, folder_id, ciphertext, nonce, dek_wrapped, wrap_nonce, algo_version, metadata, created_at, updated_at
+		RETURNING 
+			id, owner_user_id, folder_id, ciphertext, nonce, dek_wrapped, wrap_nonce, algo_version, metadata, created_at, updated_at,
+			FALSE as is_shared
 	`, itemID, input.OwnerUserID, input.FolderID, input.Ciphertext, input.Nonce, input.WrappedDEK, input.WrapNonce, input.AlgoVersion, nullableJSON(input.Metadata)).Scan(
 		&item.ID,
 		&item.OwnerUserID,
@@ -44,6 +46,7 @@ func (r *VaultRepository) CreateVaultItem(ctx context.Context, input domain.Crea
 		&metadata,
 		&item.CreatedAt,
 		&item.UpdatedAt,
+		&item.IsShared,
 	)
 	if err != nil {
 		return domain.VaultItem{}, fmt.Errorf("insert vault item: %w", err)
@@ -55,10 +58,14 @@ func (r *VaultRepository) CreateVaultItem(ctx context.Context, input domain.Crea
 
 func (r *VaultRepository) ListVaultItemsByOwner(ctx context.Context, ownerUserID string) ([]domain.VaultItem, error) {
 	rows, err := r.db.QueryContext(ctx, `
-		SELECT id, owner_user_id, folder_id, ciphertext, nonce, dek_wrapped, wrap_nonce, algo_version, metadata, created_at, updated_at
-		FROM vault_items
-		WHERE owner_user_id = $1
-		ORDER BY updated_at DESC
+		SELECT 
+			vi.id, vi.owner_user_id, vi.folder_id, vi.ciphertext, vi.nonce, 
+			vi.dek_wrapped, vi.wrap_nonce, vi.algo_version, vi.metadata, 
+			vi.created_at, vi.updated_at,
+			(SELECT COUNT(*) > 0 FROM vault_shares vs WHERE vs.item_id = vi.id) as is_shared
+		FROM vault_items vi
+		WHERE vi.owner_user_id = $1
+		ORDER BY vi.updated_at DESC
 	`, ownerUserID)
 	if err != nil {
 		return nil, fmt.Errorf("query vault items: %w", err)
@@ -81,6 +88,7 @@ func (r *VaultRepository) ListVaultItemsByOwner(ctx context.Context, ownerUserID
 			&metadata,
 			&item.CreatedAt,
 			&item.UpdatedAt,
+			&item.IsShared,
 		); err != nil {
 			return nil, fmt.Errorf("scan vault item: %w", err)
 		}
@@ -99,9 +107,13 @@ func (r *VaultRepository) GetVaultItemByIDForOwner(ctx context.Context, itemID s
 	var item domain.VaultItem
 	var metadata []byte
 	err := r.db.QueryRowContext(ctx, `
-		SELECT id, owner_user_id, folder_id, ciphertext, nonce, dek_wrapped, wrap_nonce, algo_version, metadata, created_at, updated_at
-		FROM vault_items
-		WHERE id = $1 AND owner_user_id = $2
+		SELECT 
+			vi.id, vi.owner_user_id, vi.folder_id, vi.ciphertext, vi.nonce, 
+			vi.dek_wrapped, vi.wrap_nonce, vi.algo_version, vi.metadata, 
+			vi.created_at, vi.updated_at,
+			(SELECT COUNT(*) > 0 FROM vault_shares vs WHERE vs.item_id = vi.id) as is_shared
+		FROM vault_items vi
+		WHERE vi.id = $1 AND vi.owner_user_id = $2
 	`, itemID, ownerUserID).Scan(
 		&item.ID,
 		&item.OwnerUserID,
@@ -114,6 +126,7 @@ func (r *VaultRepository) GetVaultItemByIDForOwner(ctx context.Context, itemID s
 		&metadata,
 		&item.CreatedAt,
 		&item.UpdatedAt,
+		&item.IsShared,
 	)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
@@ -140,7 +153,9 @@ func (r *VaultRepository) UpdateVaultItemForOwner(ctx context.Context, itemID st
 			metadata = $9,
 			updated_at = NOW()
 		WHERE id = $1 AND owner_user_id = $2
-		RETURNING id, owner_user_id, folder_id, ciphertext, nonce, dek_wrapped, wrap_nonce, algo_version, metadata, created_at, updated_at
+		RETURNING 
+			id, owner_user_id, folder_id, ciphertext, nonce, dek_wrapped, wrap_nonce, algo_version, metadata, created_at, updated_at,
+			(SELECT COUNT(*) > 0 FROM vault_shares vs WHERE vs.item_id = vault_items.id) as is_shared
 	`, itemID, ownerUserID, input.FolderID, input.Ciphertext, input.Nonce, input.WrappedDEK, input.WrapNonce, input.AlgoVersion, nullableJSON(input.Metadata)).Scan(
 		&item.ID,
 		&item.OwnerUserID,
@@ -153,6 +168,7 @@ func (r *VaultRepository) UpdateVaultItemForOwner(ctx context.Context, itemID st
 		&metadata,
 		&item.CreatedAt,
 		&item.UpdatedAt,
+		&item.IsShared,
 	)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {

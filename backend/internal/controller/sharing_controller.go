@@ -240,6 +240,30 @@ func (c *SharingController) HandleListSharesForItem(w http.ResponseWriter, r *ht
 	util.WriteJSON(w, http.StatusOK, resp)
 }
 
+// HandleListSentShares returns all shares created by the current user.
+func (c *SharingController) HandleListSentShares(w http.ResponseWriter, r *http.Request, session domain.Session) {
+	shares, err := c.sharing.ListSentShares(r.Context(), session.UserID)
+	if err != nil {
+		c.writeSharingError(w, r, err, "failed to list sent shares")
+		return
+	}
+
+	resp := dto.SentSharesResponse{Shares: make([]dto.SentShareResponse, 0, len(shares))}
+	for _, s := range shares {
+		resp.Shares = append(resp.Shares, dto.SentShareResponse{
+			ItemID:         s.ItemID,
+			ItemTitle:      s.ItemTitle,
+			RecipientID:    s.RecipientID,
+			RecipientEmail: s.RecipientEmail,
+			RecipientName:  s.RecipientName,
+			Permissions:    s.Permissions,
+			CreatedAt:      s.CreatedAt.UTC().Format(time.RFC3339),
+		})
+	}
+
+	util.WriteJSON(w, http.StatusOK, resp)
+}
+
 func (c *SharingController) writeSharingError(w http.ResponseWriter, r *http.Request, err error, defaultMessage string) {
 	switch {
 	case errors.Is(err, domain.ErrUnauthorizedSession):

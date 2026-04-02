@@ -1,4 +1,4 @@
-import { CreditCard, Landmark, Lock, StickyNote } from "lucide-react";
+import { CreditCard, Landmark, Lock, StickyNote, Share2 } from "lucide-react";
 import type { VaultViewItem } from "../vault.types";
 
 interface VaultItemRowProps {
@@ -111,6 +111,16 @@ export function VaultItemRow({ item, onView, onEdit, onDelete }: VaultItemRowPro
           }}
         >
           {secret.title || "Untitled"}
+          {item.isShared && (
+            <span title="This item is shared" style={{ marginLeft: "0.5rem", display: "inline-flex", alignItems: "center" }}>
+              <Share2 
+                size={12} 
+                style={{ 
+                  color: "var(--color-security-blue)",
+                }} 
+              />
+            </span>
+          )}
         </p>
         <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", marginTop: "0.1rem" }}>
           {subtitle && (

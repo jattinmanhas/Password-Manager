@@ -64,6 +64,17 @@ type SharedVaultItem struct {
 	ShareWrapNonce []byte
 }
 
+// SentShare represents an item shared BY the user to others.
+type SentShare struct {
+	ItemID         string    `json:"item_id"`
+	ItemTitle      string    `json:"item_title"`
+	RecipientID    string    `json:"recipient_id"`
+	RecipientEmail string    `json:"recipient_email"`
+	RecipientName  string    `json:"recipient_name"`
+	Permissions    string    `json:"permissions"`
+	CreatedAt      time.Time `json:"created_at"`
+}
+
 type UserKeysRepository interface {
 	UpsertKeys(ctx context.Context, input UpsertUserKeysInput) error
 	GetKeysByUserID(ctx context.Context, userID string) (UserKeys, error)
@@ -75,5 +86,7 @@ type SharingRepository interface {
 	DeleteShare(ctx context.Context, itemID string, recipientUserID string) error
 	ListSharesByRecipient(ctx context.Context, userID string) ([]SharedVaultItem, error)
 	ListSharesByItem(ctx context.Context, itemID string) ([]VaultShare, error)
+	ListSentShares(ctx context.Context, userID string) ([]SentShare, error)
 	GetShare(ctx context.Context, itemID string, userID string) (VaultShare, error)
+	DeleteAllSharesBetweenUsers(ctx context.Context, user1ID, user2ID string) error
 }

@@ -43,12 +43,14 @@ func main() {
 	userKeysRepository := repository.NewUserKeysRepository(postgres.SQL())
 	sharingRepository := repository.NewSharingRepository(postgres.SQL())
 	familyRepository := repository.NewFamilyRepository(postgres.SQL())
+	auditRepository := repository.NewAuditRepository(postgres.SQL())
 
-	authService := service.NewAuthService(authRepository, cfg.AuthPepper, cfg.SessionTTL, cfg.TOTPIssuer)
-	vaultService := service.NewVaultService(vaultRepository)
+	auditService := service.NewAuditService(auditRepository)
+	authService := service.NewAuthService(authRepository, auditService, cfg.AuthPepper, cfg.SessionTTL, cfg.TOTPIssuer)
+	vaultService := service.NewVaultService(vaultRepository, auditService)
 	folderService := service.NewFolderService(folderRepository)
-	sharingService := service.NewSharingService(sharingRepository, userKeysRepository, vaultRepository, familyRepository)
-	familyService := service.NewFamilyService(familyRepository, authRepository)
+	sharingService := service.NewSharingService(sharingRepository, userKeysRepository, vaultRepository, familyRepository, auditService)
+	familyService := service.NewFamilyService(familyRepository, authRepository, sharingService, auditService)
 
 	go func() {
 		ticker := time.NewTicker(1 * time.Hour)
@@ -65,7 +67,7 @@ func main() {
 
 	httpServer := &http.Server{
 		Addr:         ":" + cfg.Port,
-		Handler:      router.NewRouter(cfg, log, authService, vaultService, folderService, sharingService, familyService),
+		Handler:      router.NewRouter(cfg, log, auditService, authService, vaultService, folderService, sharingService, familyService),
 		ReadTimeout:  cfg.ReadTimeout,
 		WriteTimeout: cfg.WriteTimeout,
 		IdleTimeout:  cfg.IdleTimeout,
