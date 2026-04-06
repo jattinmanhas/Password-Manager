@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"time"
 
 	"pmv2/backend/internal/domain"
 	"pmv2/backend/internal/util"
@@ -24,49 +25,51 @@ func (r *VaultRepository) CreateVaultItem(ctx context.Context, input domain.Crea
 		return domain.VaultItem{}, err
 	}
 
-	var item domain.VaultItem
-	var metadata []byte
-	err = r.db.QueryRowContext(ctx, `
+	row := r.db.QueryRowContext(ctx, `
 		INSERT INTO vault_items (
-			id, owner_user_id, folder_id, ciphertext, nonce, dek_wrapped, wrap_nonce, algo_version, metadata, created_at, updated_at
+			id, owner_user_id, folder_id, ciphertext, nonce, dek_wrapped, wrap_nonce, algo_version, metadata, version, created_at, updated_at
 		)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, NOW(), NOW())
-		RETURNING 
-			id, owner_user_id, folder_id, ciphertext, nonce, dek_wrapped, wrap_nonce, algo_version, metadata, created_at, updated_at,
-			FALSE as is_shared
-	`, itemID, input.OwnerUserID, input.FolderID, input.Ciphertext, input.Nonce, input.WrappedDEK, input.WrapNonce, input.AlgoVersion, nullableJSON(input.Metadata)).Scan(
-		&item.ID,
-		&item.OwnerUserID,
-		&item.FolderID,
-		&item.Ciphertext,
-		&item.Nonce,
-		&item.WrappedDEK,
-		&item.WrapNonce,
-		&item.AlgoVersion,
-		&metadata,
-		&item.CreatedAt,
-		&item.UpdatedAt,
-		&item.IsShared,
-	)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, 1, NOW(), NOW())
+		RETURNING
+			id, owner_user_id, folder_id, ciphertext, nonce, dek_wrapped, wrap_nonce, algo_version, metadata,
+			(SELECT COUNT(*) > 0 FROM vault_shares vs WHERE vs.item_id = vault_items.id) as is_shared,
+			version, created_at, updated_at, deleted_at
+	`, itemID, input.OwnerUserID, input.FolderID, input.Ciphertext, input.Nonce, input.WrappedDEK, input.WrapNonce, input.AlgoVersion, nullableJSON(input.Metadata))
+
+	item, err := scanVaultItem(row)
 	if err != nil {
 		return domain.VaultItem{}, fmt.Errorf("insert vault item: %w", err)
 	}
-
-	item.Metadata = metadata
 	return item, nil
 }
 
 func (r *VaultRepository) ListVaultItemsByOwner(ctx context.Context, ownerUserID string) ([]domain.VaultItem, error) {
-	rows, err := r.db.QueryContext(ctx, `
-		SELECT 
-			vi.id, vi.owner_user_id, vi.folder_id, vi.ciphertext, vi.nonce, 
-			vi.dek_wrapped, vi.wrap_nonce, vi.algo_version, vi.metadata, 
-			vi.created_at, vi.updated_at,
-			(SELECT COUNT(*) > 0 FROM vault_shares vs WHERE vs.item_id = vi.id) as is_shared
+	return r.listVaultItemsByOwner(ctx, ownerUserID, false)
+}
+
+func (r *VaultRepository) ListDeletedVaultItemsByOwner(ctx context.Context, ownerUserID string) ([]domain.VaultItem, error) {
+	return r.listVaultItemsByOwner(ctx, ownerUserID, true)
+}
+
+func (r *VaultRepository) listVaultItemsByOwner(ctx context.Context, ownerUserID string, deleted bool) ([]domain.VaultItem, error) {
+	deletedPredicate := "IS NULL"
+	orderBy := "vi.updated_at DESC"
+	if deleted {
+		deletedPredicate = "IS NOT NULL"
+		orderBy = "vi.deleted_at DESC NULLS LAST, vi.updated_at DESC"
+	}
+
+	rows, err := r.db.QueryContext(ctx, fmt.Sprintf(`
+		SELECT
+			vi.id, vi.owner_user_id, vi.folder_id, vi.ciphertext, vi.nonce,
+			vi.dek_wrapped, vi.wrap_nonce, vi.algo_version, vi.metadata,
+			(SELECT COUNT(*) > 0 FROM vault_shares vs WHERE vs.item_id = vi.id) as is_shared,
+			vi.version, vi.created_at, vi.updated_at, vi.deleted_at
 		FROM vault_items vi
 		WHERE vi.owner_user_id = $1
-		ORDER BY vi.updated_at DESC
-	`, ownerUserID)
+		  AND vi.deleted_at %s
+		ORDER BY %s
+	`, deletedPredicate, orderBy), ownerUserID)
 	if err != nil {
 		return nil, fmt.Errorf("query vault items: %w", err)
 	}
@@ -74,25 +77,10 @@ func (r *VaultRepository) ListVaultItemsByOwner(ctx context.Context, ownerUserID
 
 	items := make([]domain.VaultItem, 0)
 	for rows.Next() {
-		var item domain.VaultItem
-		var metadata []byte
-		if err := rows.Scan(
-			&item.ID,
-			&item.OwnerUserID,
-			&item.FolderID,
-			&item.Ciphertext,
-			&item.Nonce,
-			&item.WrappedDEK,
-			&item.WrapNonce,
-			&item.AlgoVersion,
-			&metadata,
-			&item.CreatedAt,
-			&item.UpdatedAt,
-			&item.IsShared,
-		); err != nil {
+		item, err := scanVaultItem(rows)
+		if err != nil {
 			return nil, fmt.Errorf("scan vault item: %w", err)
 		}
-		item.Metadata = metadata
 		items = append(items, item)
 	}
 
@@ -104,44 +92,86 @@ func (r *VaultRepository) ListVaultItemsByOwner(ctx context.Context, ownerUserID
 }
 
 func (r *VaultRepository) GetVaultItemByIDForOwner(ctx context.Context, itemID string, ownerUserID string) (domain.VaultItem, error) {
-	var item domain.VaultItem
-	var metadata []byte
-	err := r.db.QueryRowContext(ctx, `
-		SELECT 
-			vi.id, vi.owner_user_id, vi.folder_id, vi.ciphertext, vi.nonce, 
-			vi.dek_wrapped, vi.wrap_nonce, vi.algo_version, vi.metadata, 
-			vi.created_at, vi.updated_at,
-			(SELECT COUNT(*) > 0 FROM vault_shares vs WHERE vs.item_id = vi.id) as is_shared
+	item, err := scanVaultItem(r.db.QueryRowContext(ctx, `
+		SELECT
+			vi.id, vi.owner_user_id, vi.folder_id, vi.ciphertext, vi.nonce,
+			vi.dek_wrapped, vi.wrap_nonce, vi.algo_version, vi.metadata,
+			(SELECT COUNT(*) > 0 FROM vault_shares vs WHERE vs.item_id = vi.id) as is_shared,
+			vi.version, vi.created_at, vi.updated_at, vi.deleted_at
 		FROM vault_items vi
 		WHERE vi.id = $1 AND vi.owner_user_id = $2
-	`, itemID, ownerUserID).Scan(
-		&item.ID,
-		&item.OwnerUserID,
-		&item.FolderID,
-		&item.Ciphertext,
-		&item.Nonce,
-		&item.WrappedDEK,
-		&item.WrapNonce,
-		&item.AlgoVersion,
-		&metadata,
-		&item.CreatedAt,
-		&item.UpdatedAt,
-		&item.IsShared,
-	)
+	`, itemID, ownerUserID))
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return domain.VaultItem{}, domain.ErrNotFound
 		}
 		return domain.VaultItem{}, fmt.Errorf("get vault item: %w", err)
 	}
-	item.Metadata = metadata
 	return item, nil
 }
 
+func (r *VaultRepository) ListVaultItemVersionsByOwner(ctx context.Context, itemID string, ownerUserID string) ([]domain.VaultItemVersion, error) {
+	rows, err := r.db.QueryContext(ctx, `
+		SELECT
+			viv.id, viv.item_id, viv.owner_user_id, viv.folder_id, viv.ciphertext, viv.nonce,
+			viv.dek_wrapped, viv.wrap_nonce, viv.algo_version, viv.metadata, viv.version, viv.created_at
+		FROM vault_item_versions viv
+		WHERE viv.item_id = $1 AND viv.owner_user_id = $2
+		ORDER BY viv.version DESC, viv.created_at DESC
+	`, itemID, ownerUserID)
+	if err != nil {
+		return nil, fmt.Errorf("list vault item versions: %w", err)
+	}
+	defer rows.Close()
+
+	versions := make([]domain.VaultItemVersion, 0)
+	for rows.Next() {
+		version, err := scanVaultItemVersion(rows)
+		if err != nil {
+			return nil, fmt.Errorf("scan vault item version: %w", err)
+		}
+		versions = append(versions, version)
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterate vault item versions: %w", err)
+	}
+
+	return versions, nil
+}
+
 func (r *VaultRepository) UpdateVaultItemForOwner(ctx context.Context, itemID string, ownerUserID string, input domain.UpdateVaultItemInput) (domain.VaultItem, error) {
-	var item domain.VaultItem
-	var metadata []byte
-	err := r.db.QueryRowContext(ctx, `
+	tx, err := r.db.BeginTx(ctx, &sql.TxOptions{})
+	if err != nil {
+		return domain.VaultItem{}, fmt.Errorf("begin update vault item tx: %w", err)
+	}
+	defer func() {
+		_ = tx.Rollback()
+	}()
+
+	current, err := scanVaultItem(tx.QueryRowContext(ctx, `
+		SELECT
+			vi.id, vi.owner_user_id, vi.folder_id, vi.ciphertext, vi.nonce,
+			vi.dek_wrapped, vi.wrap_nonce, vi.algo_version, vi.metadata,
+			(SELECT COUNT(*) > 0 FROM vault_shares vs WHERE vs.item_id = vi.id) as is_shared,
+			vi.version, vi.created_at, vi.updated_at, vi.deleted_at
+		FROM vault_items vi
+		WHERE vi.id = $1 AND vi.owner_user_id = $2 AND vi.deleted_at IS NULL
+		FOR UPDATE
+	`, itemID, ownerUserID))
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return domain.VaultItem{}, domain.ErrNotFound
+		}
+		return domain.VaultItem{}, fmt.Errorf("lock vault item for update: %w", err)
+	}
+
+	if err := r.insertVaultItemVersion(ctx, tx, current); err != nil {
+		return domain.VaultItem{}, err
+	}
+
+	nextVersion := current.Version + 1
+	updated, err := scanVaultItem(tx.QueryRowContext(ctx, `
 		UPDATE vault_items
 		SET
 			folder_id = $3,
@@ -151,38 +181,29 @@ func (r *VaultRepository) UpdateVaultItemForOwner(ctx context.Context, itemID st
 			wrap_nonce = $7,
 			algo_version = $8,
 			metadata = $9,
+			version = $10,
 			updated_at = NOW()
 		WHERE id = $1 AND owner_user_id = $2
-		RETURNING 
-			id, owner_user_id, folder_id, ciphertext, nonce, dek_wrapped, wrap_nonce, algo_version, metadata, created_at, updated_at,
-			(SELECT COUNT(*) > 0 FROM vault_shares vs WHERE vs.item_id = vault_items.id) as is_shared
-	`, itemID, ownerUserID, input.FolderID, input.Ciphertext, input.Nonce, input.WrappedDEK, input.WrapNonce, input.AlgoVersion, nullableJSON(input.Metadata)).Scan(
-		&item.ID,
-		&item.OwnerUserID,
-		&item.FolderID,
-		&item.Ciphertext,
-		&item.Nonce,
-		&item.WrappedDEK,
-		&item.WrapNonce,
-		&item.AlgoVersion,
-		&metadata,
-		&item.CreatedAt,
-		&item.UpdatedAt,
-		&item.IsShared,
-	)
+		RETURNING
+			id, owner_user_id, folder_id, ciphertext, nonce, dek_wrapped, wrap_nonce, algo_version, metadata,
+			(SELECT COUNT(*) > 0 FROM vault_shares vs WHERE vs.item_id = vault_items.id) as is_shared,
+			version, created_at, updated_at, deleted_at
+	`, itemID, ownerUserID, input.FolderID, input.Ciphertext, input.Nonce, input.WrappedDEK, input.WrapNonce, input.AlgoVersion, nullableJSON(input.Metadata), nextVersion))
 	if err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
-			return domain.VaultItem{}, domain.ErrNotFound
-		}
 		return domain.VaultItem{}, fmt.Errorf("update vault item: %w", err)
 	}
-	item.Metadata = metadata
-	return item, nil
+
+	if err := tx.Commit(); err != nil {
+		return domain.VaultItem{}, fmt.Errorf("commit update vault item tx: %w", err)
+	}
+	return updated, nil
 }
 
 func (r *VaultRepository) DeleteVaultItemForOwner(ctx context.Context, itemID string, ownerUserID string) (bool, error) {
 	result, err := r.db.ExecContext(ctx, `
-		DELETE FROM vault_items WHERE id = $1 AND owner_user_id = $2
+		UPDATE vault_items
+		SET deleted_at = NOW(), updated_at = NOW()
+		WHERE id = $1 AND owner_user_id = $2 AND deleted_at IS NULL
 	`, itemID, ownerUserID)
 	if err != nil {
 		return false, fmt.Errorf("delete vault item: %w", err)
@@ -193,6 +214,25 @@ func (r *VaultRepository) DeleteVaultItemForOwner(ctx context.Context, itemID st
 		return false, fmt.Errorf("read rows affected: %w", err)
 	}
 	return affected > 0, nil
+}
+
+func (r *VaultRepository) RestoreVaultItemForOwner(ctx context.Context, itemID string, ownerUserID string) (domain.VaultItem, error) {
+	item, err := scanVaultItem(r.db.QueryRowContext(ctx, `
+		UPDATE vault_items
+		SET deleted_at = NULL, updated_at = NOW()
+		WHERE id = $1 AND owner_user_id = $2 AND deleted_at IS NOT NULL
+		RETURNING
+			id, owner_user_id, folder_id, ciphertext, nonce, dek_wrapped, wrap_nonce, algo_version, metadata,
+			(SELECT COUNT(*) > 0 FROM vault_shares vs WHERE vs.item_id = vault_items.id) as is_shared,
+			version, created_at, updated_at, deleted_at
+	`, itemID, ownerUserID))
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return domain.VaultItem{}, domain.ErrNotFound
+		}
+		return domain.VaultItem{}, fmt.Errorf("restore vault item: %w", err)
+	}
+	return item, nil
 }
 
 func (r *VaultRepository) GetVaultSaltForUser(ctx context.Context, userID string) ([]byte, error) {
@@ -209,6 +249,83 @@ func (r *VaultRepository) GetVaultSaltForUser(ctx context.Context, userID string
 	}
 
 	return salt, nil
+}
+
+type vaultItemScanner interface {
+	Scan(dest ...any) error
+}
+
+func scanVaultItem(scanner vaultItemScanner) (domain.VaultItem, error) {
+	var item domain.VaultItem
+	var metadata []byte
+	var deletedAt sql.NullTime
+	if err := scanner.Scan(
+		&item.ID,
+		&item.OwnerUserID,
+		&item.FolderID,
+		&item.Ciphertext,
+		&item.Nonce,
+		&item.WrappedDEK,
+		&item.WrapNonce,
+		&item.AlgoVersion,
+		&metadata,
+		&item.IsShared,
+		&item.Version,
+		&item.CreatedAt,
+		&item.UpdatedAt,
+		&deletedAt,
+	); err != nil {
+		return domain.VaultItem{}, err
+	}
+	item.Metadata = metadata
+	if deletedAt.Valid {
+		t := deletedAt.Time.UTC()
+		item.DeletedAt = &t
+	}
+	return item, nil
+}
+
+func scanVaultItemVersion(scanner vaultItemScanner) (domain.VaultItemVersion, error) {
+	var version domain.VaultItemVersion
+	var metadata []byte
+	if err := scanner.Scan(
+		&version.ID,
+		&version.ItemID,
+		&version.OwnerUserID,
+		&version.FolderID,
+		&version.Ciphertext,
+		&version.Nonce,
+		&version.WrappedDEK,
+		&version.WrapNonce,
+		&version.AlgoVersion,
+		&metadata,
+		&version.Version,
+		&version.CreatedAt,
+	); err != nil {
+		return domain.VaultItemVersion{}, err
+	}
+	version.Metadata = metadata
+	return version, nil
+}
+
+func (r *VaultRepository) insertVaultItemVersion(ctx context.Context, tx *sql.Tx, item domain.VaultItem) error {
+	versionID, err := util.NewUUID()
+	if err != nil {
+		return err
+	}
+	createdAt := item.UpdatedAt
+	if createdAt.IsZero() {
+		createdAt = time.Now().UTC()
+	}
+	if _, err := tx.ExecContext(ctx, `
+		INSERT INTO vault_item_versions (
+			id, item_id, owner_user_id, folder_id, ciphertext, nonce, dek_wrapped, wrap_nonce, algo_version, metadata, version, created_at
+		)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+	`, versionID, item.ID, item.OwnerUserID, item.FolderID, item.Ciphertext, item.Nonce, item.WrappedDEK, item.WrapNonce, item.AlgoVersion, nullableJSON(item.Metadata), item.Version, createdAt); err != nil {
+		return fmt.Errorf("insert vault item version: %w", err)
+	}
+	return nil
 }
 
 func nullableJSON(raw []byte) any {

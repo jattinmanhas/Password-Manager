@@ -143,6 +143,10 @@ func (m *mockAuthRepo) UpdatePassword(ctx context.Context, input domain.ResetPas
 	return nil
 }
 
+func (m *mockAuthRepo) UpdateDisplayName(ctx context.Context, userID string, name string) error {
+	return nil
+}
+
 func newTestAuthService(repo *mockAuthRepo) *service.AuthService {
 	return service.NewAuthService(repo, nil, "pepper123", time.Hour, "Test Issuer")
 }

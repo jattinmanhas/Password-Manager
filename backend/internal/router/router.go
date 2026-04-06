@@ -103,6 +103,7 @@ func NewRouter(cfg config.Config, logger *slog.Logger, auditService *service.Aud
 	// Auth routes - Authenticated
 	auth.Handle(http.MethodGet, "/me", authMiddleware.WithSession(authController.HandleMe))
 	auth.Handle(http.MethodPost, "/logout", authMiddleware.WithSession(authController.HandleLogout))
+	auth.Handle(http.MethodPut, "/profile", authMiddleware.WithSession(authController.HandleUpdateProfile))
 
 	// TOTP routes
 	auth.Handle(http.MethodPost, "/totp/setup", authMiddleware.WithSession(authController.HandleTOTPSetup))
@@ -124,8 +125,11 @@ func NewRouter(cfg config.Config, logger *slog.Logger, auditService *service.Aud
 	vault.Handle(http.MethodGet, "/salt", authMiddleware.WithSession(vaultController.HandleGetVaultSalt))
 	vault.Handle(http.MethodPost, "/items", authMiddleware.WithSession(vaultController.HandleCreateItem))
 	vault.Handle(http.MethodGet, "/items", authMiddleware.WithSession(vaultController.HandleListItems))
+	vault.Handle(http.MethodGet, "/items/trash", authMiddleware.WithSession(vaultController.HandleListDeletedItems))
 	vault.Handle(http.MethodGet, "/items/{item_id}", authMiddleware.WithSession(vaultController.HandleGetItem))
+	vault.Handle(http.MethodGet, "/items/{item_id}/history", authMiddleware.WithSession(vaultController.HandleListItemVersions))
 	vault.Handle(http.MethodPut, "/items/{item_id}", authMiddleware.WithSession(vaultController.HandleUpdateItem))
+	vault.Handle(http.MethodPost, "/items/{item_id}/restore", authMiddleware.WithSession(vaultController.HandleRestoreItem))
 	vault.Handle(http.MethodDelete, "/items/{item_id}", authMiddleware.WithSession(vaultController.HandleDeleteItem))
 
 	// Sharing routes

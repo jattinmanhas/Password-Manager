@@ -593,3 +593,18 @@ func (s *AuthService) ResetPassword(ctx context.Context, recoveryToken string, n
 		TOTPEnabled:  record.TOTPEnabled,
 	}, nil
 }
+
+func (s *AuthService) UpdateProfile(ctx context.Context, userID string, name string) error {
+	trimmedName := util.TrimOrEmpty(name)
+	
+	if err := s.repo.UpdateDisplayName(ctx, userID, trimmedName); err != nil {
+		return fmt.Errorf("update profile: %w", err)
+	}
+
+	uid, _ := uuid.Parse(userID)
+	s.audit.LogEvent(ctx, &uid, domain.EventTypeAuthProfileUpdated, map[string]string{
+		"updated_fields": "name",
+	})
+	
+	return nil
+}

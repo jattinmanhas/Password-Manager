@@ -1,9 +1,11 @@
 import { useState, useEffect } from "react";
-import { Moon, Sun, Layout, EyeOff, Check } from "lucide-react";
-import { ThemeToggle } from "../../../components/ui/ThemeToggle";
+import { Moon, Sun, Layout, EyeOff } from "lucide-react";
+import { useTheme } from "../../../app/providers/ThemeProvider";
 
 export function AppearanceSection() {
+    const { theme, setTheme } = useTheme();
     const [density, setDensity] = useState(() => localStorage.getItem("ui-density") || "default");
+
     const [maskSensitive, setMaskSensitive] = useState(() => localStorage.getItem("mask-sensitive") === "true");
 
     useEffect(() => {
@@ -40,7 +42,41 @@ export function AppearanceSection() {
                             <h4 style={{ fontSize: "1rem", fontWeight: 600, color: "var(--color-text-main)", margin: 0 }}>Color Theme</h4>
                             <p style={{ fontSize: "0.875rem", color: "var(--color-text-subtle)", marginTop: "0.25rem" }}>Choose your preferred color scheme.</p>
                         </div>
-                        <ThemeToggle />
+                        <div style={{ 
+                            display: "inline-flex", 
+                            background: "var(--color-soft-gray)", 
+                            padding: "0.25rem", 
+                            borderRadius: "var(--radius-lg, 0.75rem)",
+                            border: "1px solid var(--color-border)"
+                        }}>
+                            {["light", "system", "dark"].map((t) => (
+                                <button
+                                    key={t}
+                                    onClick={() => setTheme(t as any)}
+                                    style={{
+                                        padding: "0.5rem 1rem",
+                                        fontSize: "0.875rem",
+                                        fontWeight: 600,
+                                        borderRadius: "var(--radius-md, 0.5rem)",
+                                        background: theme === t ? "var(--color-white)" : "transparent",
+                                        color: theme === t ? "var(--color-security-blue)" : "var(--color-text-subtle)",
+                                        boxShadow: theme === t ? "var(--shadow-sm)" : "none",
+                                        transition: "all 0.2s ease",
+                                        display: "flex",
+                                        alignItems: "center",
+                                        gap: "0.5rem",
+                                        textTransform: "capitalize",
+                                        border: "none",
+                                        cursor: "pointer"
+                                    }}
+                                >
+                                    {t === "light" && <Sun size={14} />}
+                                    {t === "dark" && <Moon size={14} />}
+                                    {t === "system" && <Layout size={14} />}
+                                    {t}
+                                </button>
+                            ))}
+                        </div>
                     </div>
                 </div>
 

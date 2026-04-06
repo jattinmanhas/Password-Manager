@@ -1,5 +1,5 @@
-import { Folder, FolderPlus, LayoutGrid, Plus, Search, Tag, Trash2, Edit2 } from "lucide-react";
-import type { VaultCardModel, VaultFolder } from "../vault.types";
+import { Folder, FolderPlus, LayoutGrid, Trash2, Edit2 } from "lucide-react";
+import { TRASH_VAULT_ID, type VaultCardModel } from "../vault.types";
 
 interface VaultSidebarProps {
   vaults: VaultCardModel[];
@@ -96,7 +96,7 @@ export function VaultSidebar({
                 onClick={() => onSelectVault(vault.id)}
               >
                 <div style={{ marginRight: "0.75rem", display: "flex", alignItems: "center" }}>
-                  {vault.isSystem ? <LayoutGrid size={18} /> : <Folder size={18} />}
+                  {vault.isSystem ? (vault.id === TRASH_VAULT_ID ? <Trash2 size={18} /> : <LayoutGrid size={18} />) : <Folder size={18} />}
                 </div>
                 <span
                   style={{

@@ -56,4 +56,7 @@ export const authService = {
     resetPassword(req: RecoveryResetRequest) {
         return request<RecoveryResetResponse>("POST", "/auth/recovery/reset", req);
     },
+    updateProfile(name: string) {
+        return request<void>("PUT", "/auth/profile", { name });
+    },
 };

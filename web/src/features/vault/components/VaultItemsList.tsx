@@ -1,14 +1,19 @@
-import { CreditCard, Landmark, Lock, StickyNote, Share2 } from "lucide-react";
+import { CreditCard, Landmark, Lock, StickyNote, Share2, Eye, Pencil, Trash2, RotateCcw, History } from "lucide-react";
+import { Tooltip } from "../../../components/ui/Tooltip";
 import type { VaultViewItem } from "../vault.types";
 
 interface VaultItemRowProps {
   item: VaultViewItem;
+  isTrashView?: boolean;
   onView: () => void;
   onEdit: () => void;
   onDelete: () => void;
+  onRestore?: () => void;
+  onHistory?: () => void;
+  onShare?: () => void;
 }
 
-export function VaultItemRow({ item, onView, onEdit, onDelete }: VaultItemRowProps) {
+export function VaultItemRow({ item, isTrashView, onView, onEdit, onDelete, onRestore, onHistory, onShare }: VaultItemRowProps) {
   if (item.isCorrupted || !item.secret) {
     return (
       <div
@@ -165,49 +170,146 @@ export function VaultItemRow({ item, onView, onEdit, onDelete }: VaultItemRowPro
       </div>
 
       {/* Actions */}
-      <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", flexShrink: 0 }}>
-        <button
-          type="button"
-          onClick={onView}
-          style={{
-            fontSize: "0.8125rem",
-            fontWeight: 600,
-            color: "var(--color-security-blue)",
-            background: "none",
-            border: "none",
-            cursor: "pointer",
-          }}
-        >
-          View
-        </button>
-        <button
-          type="button"
-          onClick={onEdit}
-          style={{
-            fontSize: "0.8125rem",
-            fontWeight: 600,
-            color: "var(--color-security-blue)",
-            background: "none",
-            border: "none",
-            cursor: "pointer",
-          }}
-        >
-          Edit
-        </button>
-        <button
-          type="button"
-          onClick={onDelete}
-          style={{
-            fontSize: "0.8125rem",
-            fontWeight: 600,
-            color: "#EF4444",
-            background: "none",
-            border: "none",
-            cursor: "pointer",
-          }}
-        >
-          Delete
-        </button>
+      <div style={{ display: "flex", alignItems: "center", gap: "0.25rem", flexShrink: 0 }}>
+        <Tooltip content="View">
+          <button
+            type="button"
+            onClick={onView}
+            style={{
+              padding: "0.5rem",
+              borderRadius: "0.5rem",
+              color: "var(--color-security-blue)",
+              background: "transparent",
+              border: "none",
+              cursor: "pointer",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+            }}
+            onMouseEnter={(e) => e.currentTarget.style.backgroundColor = "rgba(37,99,235,0.1)"}
+            onMouseLeave={(e) => e.currentTarget.style.backgroundColor = "transparent"}
+          >
+            <Eye size={16} />
+          </button>
+        </Tooltip>
+        
+        {onShare && !isTrashView && item.vaultType !== "shared" && (
+          <Tooltip content="Share">
+            <button
+              type="button"
+              onClick={onShare}
+              style={{
+                padding: "0.5rem",
+                borderRadius: "0.5rem",
+                color: "var(--color-security-blue)",
+                background: "transparent",
+                border: "none",
+                cursor: "pointer",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+              }}
+              onMouseEnter={(e) => e.currentTarget.style.backgroundColor = "rgba(37,99,235,0.1)"}
+              onMouseLeave={(e) => e.currentTarget.style.backgroundColor = "transparent"}
+            >
+              <Share2 size={16} />
+            </button>
+          </Tooltip>
+        )}
+
+        {onHistory && (
+          <Tooltip content="History">
+            <button
+              type="button"
+              onClick={onHistory}
+              style={{
+                padding: "0.5rem",
+                borderRadius: "0.5rem",
+                color: "var(--color-text-subtle)",
+                background: "transparent",
+                border: "none",
+                cursor: "pointer",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+              }}
+              onMouseEnter={(e) => e.currentTarget.style.backgroundColor = "var(--color-bg-light)"}
+              onMouseLeave={(e) => e.currentTarget.style.backgroundColor = "transparent"}
+            >
+              <History size={16} />
+            </button>
+          </Tooltip>
+        )}
+        
+        {!isTrashView && (
+          <Tooltip content="Edit">
+            <button
+              type="button"
+              onClick={onEdit}
+              style={{
+                padding: "0.5rem",
+                borderRadius: "0.5rem",
+                color: "var(--color-security-blue)",
+                background: "transparent",
+                border: "none",
+                cursor: "pointer",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+              }}
+              onMouseEnter={(e) => e.currentTarget.style.backgroundColor = "rgba(37,99,235,0.1)"}
+              onMouseLeave={(e) => e.currentTarget.style.backgroundColor = "transparent"}
+            >
+              <Pencil size={16} />
+            </button>
+          </Tooltip>
+        )}
+
+        {isTrashView ? (
+          <Tooltip content="Restore">
+            <button
+              type="button"
+              onClick={onRestore}
+              style={{
+                padding: "0.5rem",
+                borderRadius: "0.5rem",
+                color: "var(--color-security-blue)",
+                background: "transparent",
+                border: "none",
+                cursor: "pointer",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+              }}
+              onMouseEnter={(e) => e.currentTarget.style.backgroundColor = "rgba(37,99,235,0.1)"}
+              onMouseLeave={(e) => e.currentTarget.style.backgroundColor = "transparent"}
+            >
+              <RotateCcw size={16} />
+            </button>
+          </Tooltip>
+        ) : (
+          <Tooltip content="Delete">
+            <button
+              type="button"
+              onClick={onDelete}
+              style={{
+                padding: "0.5rem",
+                borderRadius: "0.5rem",
+                color: "var(--color-red, #EF4444)",
+                background: "transparent",
+                border: "none",
+                cursor: "pointer",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+              }}
+              onMouseEnter={(e) => e.currentTarget.style.backgroundColor = "rgba(239, 68, 68, 0.1)"}
+              onMouseLeave={(e) => e.currentTarget.style.backgroundColor = "transparent"}
+            >
+              <Trash2 size={16} />
+            </button>
+          </Tooltip>
+        )}
       </div>
     </div>
   );
@@ -218,19 +320,27 @@ export function VaultItemRow({ item, onView, onEdit, onDelete }: VaultItemRowPro
 interface VaultItemsListProps {
   items: VaultViewItem[];
   loading: boolean;
+  isTrashView?: boolean;
   onRefresh: () => void;
   onView: (item: VaultViewItem) => void;
   onEdit: (item: VaultViewItem) => void;
   onDelete: (item: VaultViewItem) => void;
+  onRestore?: (item: VaultViewItem) => void;
+  onHistory?: (item: VaultViewItem) => void;
+  onShare?: (item: VaultViewItem) => void;
 }
 
 export function VaultItemsList({
   items,
   loading,
+  isTrashView,
   onRefresh,
   onView,
   onEdit,
   onDelete,
+  onRestore,
+  onHistory,
+  onShare,
 }: VaultItemsListProps) {
   return (
     <div
@@ -259,10 +369,10 @@ export function VaultItemsList({
               marginBottom: "0.25rem",
             }}
           >
-            Saved Items
+            {isTrashView ? "Trash" : "Saved Items"}
           </h2>
           <p style={{ fontSize: "0.875rem", color: "var(--color-text-subtle)" }}>
-            {items.length} item{items.length !== 1 ? "s" : ""} in this vault
+            {items.length} item{items.length !== 1 ? "s" : ""} {isTrashView ? "available for restore" : "in this vault"}
           </p>
         </div>
         <button
@@ -309,7 +419,7 @@ export function VaultItemsList({
             <Lock size={20} style={{ color: "var(--color-text-light)" }} />
           </div>
           <p style={{ fontSize: "0.875rem", color: "var(--color-text-subtle)" }}>
-            No items yet. Add your first credential above.
+            {isTrashView ? "Trash is empty." : "No items yet. Add your first credential above."}
           </p>
         </div>
       ) : (
@@ -318,9 +428,13 @@ export function VaultItemsList({
             <VaultItemRow
               key={item.id}
               item={item}
+              isTrashView={isTrashView}
               onView={() => onView(item)}
               onEdit={() => onEdit(item)}
               onDelete={() => onDelete(item)}
+              onRestore={onRestore ? () => onRestore(item) : undefined}
+              onHistory={onHistory ? () => onHistory(item) : undefined}
+              onShare={onShare ? () => onShare(item) : undefined}
             />
           ))}
         </div>

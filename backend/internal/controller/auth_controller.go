@@ -432,3 +432,23 @@ func (c *AuthController) clearSessionCookie(w http.ResponseWriter) {
 		MaxAge:   -1,
 	})
 }
+
+func (c *AuthController) HandleUpdateProfile(w http.ResponseWriter, r *http.Request, session domain.Session) {
+	var req dto.UpdateProfileRequest
+	if err := util.ReadJSON(r, &req); err != nil {
+		util.WriteError(w, http.StatusBadRequest, "invalid_json", "invalid request body")
+		return
+	}
+
+	if err := c.auth.UpdateProfile(r.Context(), session.UserID, req.Name); err != nil {
+		if errors.Is(err, domain.ErrNotFound) {
+			util.WriteError(w, http.StatusNotFound, "not_found", "user not found")
+			return
+		}
+		c.log.ErrorContext(r.Context(), "update profile failed", slog.String("user_id", session.UserID), slog.Any("error", err))
+		util.WriteError(w, http.StatusInternalServerError, "internal_error", "failed to update profile")
+		return
+	}
+
+	util.WriteJSON(w, http.StatusOK, dto.StatusResponse{Status: "profile_updated"})
+}

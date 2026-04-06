@@ -19,12 +19,13 @@ import type { XChaCha20Poly1305Aead } from "../../../crypto";
 import { generateX25519KeyPair, encryptPrivateKey, decryptPrivateKey } from "../../../crypto/sharing";
 import { vaultService } from "../services/vault.service";
 import { sharingService } from "../services/sharing.service";
-import type { FolderResponse, FoldersResponse, VaultItemResponse } from "../types";
+import type { FolderResponse, FoldersResponse, VaultItemResponse, VaultItemVersionResponse } from "../types";
 
 import {
   DEFAULT_PERSONAL_VAULT_ID,
   DEFAULT_SECRET,
   DEFAULT_SHARED_VAULT_ID,
+  TRASH_VAULT_ID,
   type VaultCardModel,
   type VaultDirectoryEntry,
   type VaultFilter,
@@ -52,6 +53,7 @@ import { useVaultSession } from "../../../app/providers/VaultProvider";
 import { VaultUnlockScreen } from "../components/VaultUnlockScreen";
 import { VaultSidebar } from "../components/VaultSidebar";
 import { VaultItemForm } from "../components/VaultItemForm";
+import { VaultItemHistoryModal } from "../components/VaultItemHistoryModal";
 import { VaultItemsList } from "../components/VaultItemsList";
 import { VaultModal } from "../components/VaultModal";
 import { VaultItemViewModal } from "../components/VaultItemViewModal";
@@ -102,6 +104,10 @@ export function Vault() {
   const [viewingItem, setViewingItem] = useState<VaultViewItem | null>(null);
   const [itemFolderId, setItemFolderId] = useState<string | undefined>();
   const [sharingItem, setSharingItem] = useState<VaultViewItem | null>(null);
+  const [trashedItems, setTrashedItems] = useState<VaultViewItem[]>([]);
+  const [historyItem, setHistoryItem] = useState<VaultViewItem | null>(null);
+  const [historyVersions, setHistoryVersions] = useState<VaultViewItem[]>([]);
+  const [loadingHistory, setLoadingHistory] = useState(false);
 
   // ── Vault directory ────────────────────────────────────────────────────────
   const [vaultFilter, setVaultFilter] = useState<string>("all");
@@ -130,6 +136,10 @@ export function Vault() {
     setDraft(DEFAULT_SECRET);
     setItemFolderId(undefined);
     setFolders([]);
+    setTrashedItems([]);
+    setViewingItem(null);
+    setHistoryItem(null);
+    setHistoryVersions([]);
     setSelectedFolderId(undefined);
     setTagFilter([]);
     if (clearError) setError("");
@@ -152,7 +162,11 @@ export function Vault() {
         });
         return {
           id: item.id,
+          folderId: item.folder_id,
+          createdAt: item.created_at,
           updatedAt: item.updated_at,
+          deletedAt: item.deleted_at,
+          version: item.version,
           secret: normalizeSecret(JSON.parse(plaintext)),
           isCorrupted: false,
           isShared: item.is_shared,
@@ -161,7 +175,11 @@ export function Vault() {
       } catch {
         return {
           id: item.id,
+          folderId: item.folder_id,
+          createdAt: item.created_at,
           updatedAt: item.updated_at,
+          deletedAt: item.deleted_at,
+          version: item.version,
           secret: null,
           isCorrupted: true,
           ...vaultRef,
@@ -225,8 +243,9 @@ export function Vault() {
       setLoadingItems(true);
       setError("");
       try {
-        const [itemsResp, foldersResp] = await Promise.all([
+        const [itemsResp, trashResp, foldersResp] = await Promise.all([
           sourceItems ? { items: sourceItems } : vaultService.listItems(),
+          vaultService.listTrashItems(),
           vaultService.listFolders(),
         ]);
 
@@ -238,6 +257,7 @@ export function Vault() {
         
         setFolders(foldersResp.folders.map(f => decryptFolder(f, key, cipher)));
         setItems(all.filter((i) => !isVerifierItem(i)).map((i) => decryptItem(i, key, cipher)));
+        setTrashedItems(trashResp.items.map((i) => decryptItem(i, key, cipher)));
       } catch (err) {
         setError(err instanceof Error ? err.message : "Failed to load vault items");
       } finally {
@@ -290,6 +310,7 @@ export function Vault() {
     setVaultDirectory([
       { id: DEFAULT_PERSONAL_VAULT_ID, name: "Personal Vault", type: "personal", members: [displayName], updatedAt: now, isSystem: true },
       { id: DEFAULT_SHARED_VAULT_ID, name: "Family Shared Vault", type: "shared", members: [displayName, "Family"], updatedAt: now, isSystem: true },
+      { id: TRASH_VAULT_ID, name: "Trash", type: "personal", members: [displayName], updatedAt: now, isSystem: true },
     ]);
   }, [session?.userId, session?.name]);
 
@@ -322,6 +343,15 @@ export function Vault() {
         isSystem: true,
         itemCount: 0,
       },
+      {
+        id: TRASH_VAULT_ID,
+        name: "Trash",
+        type: "personal",
+        members: [session?.name?.trim() || "You"],
+        updatedAt: new Date().toISOString(),
+        isSystem: true,
+        itemCount: trashedItems.length,
+      },
     ];
 
     // Add real backend folders as vaults
@@ -349,12 +379,23 @@ export function Vault() {
       }
     }
 
+    const trashVault = list.find((entry) => entry.id === TRASH_VAULT_ID);
+    if (trashVault) {
+      for (const item of trashedItems) {
+        trashVault.itemCount += 1;
+        const updatedAt = item.deletedAt || item.updatedAt;
+        if (new Date(updatedAt).getTime() > new Date(trashVault.updatedAt).getTime()) {
+          trashVault.updatedAt = updatedAt;
+        }
+      }
+    }
+
     return list.sort((a, b) => {
       if (a.id === DEFAULT_PERSONAL_VAULT_ID) return -1;
       if (b.id === DEFAULT_PERSONAL_VAULT_ID) return 1;
       return a.name.localeCompare(b.name);
     });
-  }, [folders, items, session?.name]);
+  }, [folders, items, session?.name, trashedItems]);
 
   useEffect(() => {
     if (!vaults.some((v) => v.id === activeVaultId) && vaults.length > 0) {
@@ -369,12 +410,14 @@ export function Vault() {
     [activeVaultId, vaults],
   );
 
+  const isTrashView = activeVault?.id === TRASH_VAULT_ID;
+
   const visibleItems = useMemo(() => {
     if (!activeVault) return [];
-    let filtered = items.filter((i) => i.vaultId === activeVault.id);
+    let filtered = isTrashView ? [...trashedItems] : items.filter((i) => i.vaultId === activeVault.id);
 
     // Filter by selected folder in the sidebar (Multi-Vault)
-    if (selectedFolderId) {
+    if (!isTrashView && selectedFolderId) {
       filtered = filtered.filter((i) => i.folderId === selectedFolderId);
     }
 
@@ -408,7 +451,7 @@ export function Vault() {
     }
 
     return filtered;
-  }, [activeVault, items, selectedFolderId, tagFilter, vaultFilter, vaultQuery]);
+  }, [activeVault, isTrashView, items, selectedFolderId, tagFilter, trashedItems, vaultFilter, vaultQuery]);
 
   const corruptedCount = useMemo(
     () => visibleItems.filter((i) => i.isCorrupted).length,
@@ -592,8 +635,33 @@ export function Vault() {
     }
   }, [aead, userPrivateKey, isKekVerified, loadSharedItems]);
 
+  const mapVersionToItem = useCallback((version: VaultItemVersionResponse): VaultViewItem => {
+    return decryptItem({
+      id: version.id,
+      folder_id: version.folder_id,
+      ciphertext: version.ciphertext,
+      nonce: version.nonce,
+      wrapped_dek: version.wrapped_dek,
+      wrap_nonce: version.wrap_nonce,
+      algo_version: version.algo_version,
+      metadata: version.metadata,
+      is_shared: false,
+      version: version.version,
+      created_at: version.created_at,
+      updated_at: version.created_at,
+      deleted_at: undefined,
+    }, kek!, aead!);
+  }, [aead, decryptItem, kek]);
+
+  const refreshVaultData = useCallback(async () => {
+    if (aead && kek) {
+      await loadItems(kek, aead);
+    }
+  }, [aead, kek, loadItems]);
+
   const handleCreateItem = async (data: VaultItemFormData) => {
     if (!activeVault) { setError("Select a vault first"); return; }
+    if (isTrashView) { setError("Restore the item from Trash before editing it."); return; }
     if (!(await ensureVerifiedWriteAccess())) return;
     if (!kek || !aead) return;
 
@@ -619,7 +687,7 @@ export function Vault() {
       setItemFolderId(undefined);
       setEditingItemId(null);
       setShowItemModal(false);
-      await loadItems(kek, aead);
+      await refreshVaultData();
       toast.success(editingItemId ? "Vault item updated" : "Vault item saved");
     } catch (err) {
       setError(err instanceof ApiError ? err.message : err instanceof Error ? err.message : "Failed to save vault item");
@@ -635,8 +703,8 @@ export function Vault() {
 
     const confirmed = await dialog.confirm({
       title: "Delete vault item",
-      message: `Delete ${item.secret?.title || "this item"}? This action cannot be undone.`,
-      confirmLabel: "Delete",
+      message: `Move ${item.secret?.title || "this item"} to Trash? You can restore it later.`,
+      confirmLabel: "Move to Trash",
       cancelLabel: "Cancel",
     });
     if (!confirmed) return;
@@ -644,10 +712,38 @@ export function Vault() {
     try {
       await vaultService.deleteItem(item.id);
       if (editingItemId === item.id) { setEditingItemId(null); setDraft(DEFAULT_SECRET); }
-      await loadItems(kek, aead);
-      toast.success("Vault item deleted");
+      await refreshVaultData();
+      toast.success("Vault item moved to Trash");
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Failed to delete vault item");
+    }
+  };
+
+  const handleRestore = async (item: VaultViewItem) => {
+    if (!(await ensureVerifiedWriteAccess())) return;
+    if (!kek || !aead) return;
+
+    try {
+      await vaultService.restoreItem(item.id);
+      await refreshVaultData();
+      toast.success("Vault item restored");
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Failed to restore vault item");
+    }
+  };
+
+  const handleOpenHistory = async (item: VaultViewItem) => {
+    if (!aead || !kek) return;
+    setHistoryItem(item);
+    setHistoryVersions([]);
+    setLoadingHistory(true);
+    try {
+      const response = await vaultService.getItemHistory(item.id);
+      setHistoryVersions([item, ...response.versions.map((version) => mapVersionToItem(version))]);
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Failed to load item history");
+    } finally {
+      setLoadingHistory(false);
     }
   };
 
@@ -667,7 +763,7 @@ export function Vault() {
             name_ciphertext: toBase64(ciphertext),
             nonce: toBase64(nonce),
           });
-          await loadItems(kek, aead);
+          await refreshVaultData();
           toast.success("Folder created");
         } catch (err) {
           setError("Failed to create folder");
@@ -683,7 +779,7 @@ export function Vault() {
             name_ciphertext: toBase64(ciphertext),
             nonce: toBase64(nonce),
           });
-          await loadItems(kek, aead);
+          await refreshVaultData();
           toast.success("Folder updated");
         } catch (err) {
           setError("Failed to update folder");
@@ -706,7 +802,7 @@ export function Vault() {
     if (!confirmed) return;
     try {
       await vaultService.deleteFolder(vault.id);
-      if (aead && kek) await loadItems(kek, aead);
+      await refreshVaultData();
       toast.success("Folder deleted");
     } catch (err) {
       setError("Failed to delete folder");
@@ -734,6 +830,10 @@ export function Vault() {
   };
 
   const openCreateItemModal = () => {
+    if (isTrashView) {
+      setError("Trash items cannot be edited directly. Restore an item first.");
+      return;
+    }
     setEditingItemId(null);
     setDraft(DEFAULT_SECRET);
     if (activeVault && !activeVault.isSystem) {
@@ -747,6 +847,10 @@ export function Vault() {
 
   const startEdit = (item: VaultViewItem) => {
     if (!item.secret || item.isCorrupted) return;
+    if (isTrashView) {
+      setError("Restore the item from Trash before editing it.");
+      return;
+    }
     setEditingItemId(item.id);
     setDraft(item.secret);
     setItemFolderId(item.folderId);
@@ -836,7 +940,7 @@ export function Vault() {
               />
               <Input
                 type="search"
-                placeholder={`Search`}
+                placeholder={isTrashView ? "Search trash" : "Search"}
                 value={vaultQuery}
                 onChange={(e) => setVaultQuery(e.target.value)}
                 style={{ paddingLeft: "2.5rem" }}
@@ -866,18 +970,20 @@ export function Vault() {
             >
               🔒 Lock
             </Button>
-            <Button 
-              onClick={openCreateItemModal} 
-              style={{ gap: "0.5rem", whiteSpace: "nowrap" }}
-            >
-              <Plus size={18} />
-              Add Item
-            </Button>
+            {!isTrashView && (
+              <Button
+                onClick={openCreateItemModal}
+                style={{ gap: "0.5rem", whiteSpace: "nowrap" }}
+              >
+                <Plus size={18} />
+                Add Item
+              </Button>
+            )}
           </div>
         </div>
 
         {/* Tags Filter */}
-        {visibleItems.length > 0 && (
+        {!isTrashView && visibleItems.length > 0 && (
           <div style={{ display: "flex", flexWrap: "wrap", gap: "0.5rem", alignItems: "center" }}>
             <div style={{ color: "var(--color-text-light)", fontSize: "0.75rem", fontWeight: 600, textTransform: "uppercase" }}>
               Filter by Tag:
@@ -914,10 +1020,14 @@ export function Vault() {
         <VaultItemsList
           items={visibleItems}
           loading={loadingItems}
-          onRefresh={() => { if (aead && kek) void loadItems(kek, aead); }}
+          isTrashView={isTrashView}
+          onRefresh={() => { void refreshVaultData(); }}
           onView={setViewingItem}
           onEdit={startEdit}
           onDelete={(item) => void handleDelete(item)}
+          onRestore={(item) => void handleRestore(item)}
+          onHistory={(item) => void handleOpenHistory(item)}
+          onShare={(item) => setSharingItem(item)}
         />
 
         {showItemModal && (
@@ -952,6 +1062,18 @@ export function Vault() {
             vaultName={activeVault?.name ?? ""}
             onClose={() => setViewingItem(null)}
             onShare={viewingItem.vaultType !== "shared" ? () => { setViewingItem(null); setSharingItem(viewingItem); } : undefined}
+          />
+        )}
+
+        {historyItem && (
+          <VaultItemHistoryModal
+            itemTitle={historyItem.secret?.title || "Untitled"}
+            versions={historyVersions}
+            loading={loadingHistory}
+            onClose={() => {
+              setHistoryItem(null);
+              setHistoryVersions([]);
+            }}
           />
         )}
 

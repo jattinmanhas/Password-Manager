@@ -10,22 +10,24 @@ import (
 type EventType string
 
 const (
-	EventTypeAuthLoginSuccess     EventType = "auth_login_success"
-	EventTypeAuthLoginFailed      EventType = "auth_login_failed"
-	EventTypeAuthLogout           EventType = "auth_logout"
-	EventTypeMFASetup             EventType = "mfa_setup"
-	EventTypeMFADisabled          EventType = "mfa_disabled"
-	EventTypeRecoverySetup        EventType = "recovery_setup"
-	
-	EventTypeVaultItemCreated     EventType = "vault_item_created"
-	EventTypeVaultItemUpdated     EventType = "vault_item_updated"
-	EventTypeVaultItemDeleted     EventType = "vault_item_deleted"
-	EventTypeVaultFolderCreated   EventType = "vault_folder_created"
-	EventTypeVaultFolderDeleted   EventType = "vault_folder_deleted"
-	
-	EventTypeSharingItemShared    EventType = "sharing_item_shared"
-	EventTypeSharingRevoked       EventType = "sharing_revoked"
-	
+	EventTypeAuthLoginSuccess   EventType = "auth_login_success"
+	EventTypeAuthLoginFailed    EventType = "auth_login_failed"
+	EventTypeAuthLogout         EventType = "auth_logout"
+	EventTypeAuthProfileUpdated EventType = "auth_profile_updated"
+	EventTypeMFASetup           EventType = "mfa_setup"
+	EventTypeMFADisabled        EventType = "mfa_disabled"
+	EventTypeRecoverySetup      EventType = "recovery_setup"
+
+	EventTypeVaultItemCreated   EventType = "vault_item_created"
+	EventTypeVaultItemUpdated   EventType = "vault_item_updated"
+	EventTypeVaultItemDeleted   EventType = "vault_item_deleted"
+	EventTypeVaultItemRestored  EventType = "vault_item_restored"
+	EventTypeVaultFolderCreated EventType = "vault_folder_created"
+	EventTypeVaultFolderDeleted EventType = "vault_folder_deleted"
+
+	EventTypeSharingItemShared EventType = "sharing_item_shared"
+	EventTypeSharingRevoked    EventType = "sharing_revoked"
+
 	EventTypeFamilyInviteSent     EventType = "family_invite_sent"
 	EventTypeFamilyInviteAccepted EventType = "family_invite_accepted"
 	EventTypeFamilyMemberRemoved  EventType = "family_member_removed"

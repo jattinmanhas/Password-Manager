@@ -58,6 +58,19 @@ func (s *VaultService) ListItems(ctx context.Context, userID string) ([]domain.V
 	return items, nil
 }
 
+func (s *VaultService) ListDeletedItems(ctx context.Context, userID string) ([]domain.VaultItem, error) {
+	ownerUserID := strings.TrimSpace(userID)
+	if ownerUserID == "" {
+		return nil, domain.ErrUnauthorizedSession
+	}
+
+	items, err := s.repo.ListDeletedVaultItemsByOwner(ctx, ownerUserID)
+	if err != nil {
+		return nil, fmt.Errorf("list deleted vault items: %w", err)
+	}
+	return items, nil
+}
+
 func (s *VaultService) GetItem(ctx context.Context, userID string, itemID string) (domain.VaultItem, error) {
 	ownerUserID := strings.TrimSpace(userID)
 	trimmedItemID := strings.TrimSpace(itemID)
@@ -108,6 +121,23 @@ func (s *VaultService) UpdateItem(ctx context.Context, userID string, itemID str
 	return item, nil
 }
 
+func (s *VaultService) ListItemVersions(ctx context.Context, userID string, itemID string) ([]domain.VaultItemVersion, error) {
+	ownerUserID := strings.TrimSpace(userID)
+	trimmedItemID := strings.TrimSpace(itemID)
+	if ownerUserID == "" {
+		return nil, domain.ErrUnauthorizedSession
+	}
+	if trimmedItemID == "" {
+		return nil, domain.ErrNotFound
+	}
+
+	versions, err := s.repo.ListVaultItemVersionsByOwner(ctx, trimmedItemID, ownerUserID)
+	if err != nil {
+		return nil, fmt.Errorf("list vault item versions: %w", err)
+	}
+	return versions, nil
+}
+
 func (s *VaultService) DeleteItem(ctx context.Context, userID string, itemID string) error {
 	ownerUserID := strings.TrimSpace(userID)
 	trimmedItemID := strings.TrimSpace(itemID)
@@ -132,6 +162,32 @@ func (s *VaultService) DeleteItem(ctx context.Context, userID string, itemID str
 	})
 
 	return nil
+}
+
+func (s *VaultService) RestoreItem(ctx context.Context, userID string, itemID string) (domain.VaultItem, error) {
+	ownerUserID := strings.TrimSpace(userID)
+	trimmedItemID := strings.TrimSpace(itemID)
+	if ownerUserID == "" {
+		return domain.VaultItem{}, domain.ErrUnauthorizedSession
+	}
+	if trimmedItemID == "" {
+		return domain.VaultItem{}, domain.ErrNotFound
+	}
+
+	item, err := s.repo.RestoreVaultItemForOwner(ctx, trimmedItemID, ownerUserID)
+	if err != nil {
+		if errors.Is(err, domain.ErrNotFound) {
+			return domain.VaultItem{}, domain.ErrNotFound
+		}
+		return domain.VaultItem{}, fmt.Errorf("restore vault item: %w", err)
+	}
+
+	uid, _ := uuid.Parse(ownerUserID)
+	s.audit.LogEvent(ctx, &uid, domain.EventTypeVaultItemRestored, map[string]string{
+		"item_id": trimmedItemID,
+	})
+
+	return item, nil
 }
 
 func (s *VaultService) GetVaultSalt(ctx context.Context, userID string) ([]byte, error) {

@@ -222,10 +222,7 @@ export function VaultItemViewModal({ item, vaultName, onClose, onShare }: VaultI
             <>
               <FieldView label="Cardholder Name" value={(secret as any).cardholderName} />
               <FieldView label="Card Number" value={(secret as any).cardNumber} sensitive />
-              <div style={{ display: "flex", gap: "1rem" }}>
-                <FieldView label="Expiry Date" value={(secret as any).expiryDate} />
-                <FieldView label="CVV" value={(secret as any).cvv} sensitive />
-              </div>
+              <FieldView label="Expiry Date" value={(secret as any).expiryDate} />
               <FieldView label="Card Type" value={(secret as any).cardType !== "other" ? (secret as any).cardType : undefined} />
             </>
           )}

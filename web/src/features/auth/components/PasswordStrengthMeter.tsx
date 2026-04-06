@@ -6,17 +6,19 @@ interface PasswordStrengthMeterProps {
 
 export function PasswordStrengthMeter({ password = "" }: PasswordStrengthMeterProps) {
     const strength = useMemo(() => {
+        if (!password) return 0;
+
+        const hasLength = password.length >= 8;
+        const hasUpper = /[A-Z]/.test(password);
+        const hasLowerAndNum = /[a-z]/.test(password) && /[0-9]/.test(password);
+        const hasSpecial = /[^A-Za-z0-9]/.test(password);
+
         let score = 0;
-        if (!password) return score;
+        if (hasLength) score += 1;
+        if (hasUpper) score += 1;
+        if (hasLowerAndNum) score += 1;
+        if (hasSpecial) score += 1;
 
-        if (password.length >= 8) score += 1;
-        if (password.length >= 12) score += 1;
-        if (/[A-Z]/.test(password)) score += 1;
-        if (/[a-z]/.test(password)) score += 1;
-        if (/[0-9]/.test(password)) score += 1;
-        if (/[^A-Za-z0-9]/.test(password)) score += 1;
-
-        if (score > 4) return 4;
         return score;
     }, [password]);
 

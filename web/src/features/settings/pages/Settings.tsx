@@ -1,11 +1,12 @@
 import { useState } from "react";
-import { User, Shield, Palette, Info, ChevronRight } from "lucide-react";
+import { User, Shield, Palette, Info, ChevronRight, History } from "lucide-react";
 import { ProfileSection } from "../components/ProfileSection";
 import { SecuritySection } from "../components/SecuritySection";
 import { AppearanceSection } from "../components/AppearanceSection";
+import { ChangelogSection } from "../components/ChangelogSection";
 import { Button } from "../../../components/ui/Button";
 
-type SettingsTab = "profile" | "security" | "appearance" | "about";
+type SettingsTab = "profile" | "security" | "appearance" | "about" | "changelog";
 
 export function Settings() {
     const [activeTab, setActiveTab] = useState<SettingsTab>("profile");
@@ -14,7 +15,8 @@ export function Settings() {
         { id: "profile", label: "Profile", icon: User, description: "Personal info & account" },
         { id: "security", label: "Security", icon: Shield, description: "2FA & recovery" },
         { id: "appearance", label: "Appearance", icon: Palette, description: "Theme & interface" },
-        { id: "about", label: "About", icon: Info, description: "Version & system info" }
+        { id: "changelog", label: "Changelog", icon: History, description: "Updates & version history" },
+        { id: "about", label: "About", icon: Info, description: "System info" }
     ] as const;
 
     const renderContent = () => {
@@ -22,7 +24,8 @@ export function Settings() {
             case "profile": return <ProfileSection />;
             case "security": return <SecuritySection />;
             case "appearance": return <AppearanceSection />;
-            case "about": return <AboutSection />;
+            case "changelog": return <ChangelogSection />;
+            case "about": return <AboutSection onNavigate={setActiveTab} />;
             default: return <ProfileSection />;
         }
     };
@@ -109,7 +112,7 @@ export function Settings() {
     );
 }
 
-function AboutSection() {
+function AboutSection({ onNavigate }: { onNavigate: (tab: "changelog") => void }) {
     return (
         <div style={{ display: "flex", flexDirection: "column", gap: "2rem" }}>
             <div style={{ padding: "0 0.5rem" }}>
@@ -140,8 +143,7 @@ function AboutSection() {
                     <p style={{ fontSize: "0.875rem", color: "var(--color-text-subtle)", margin: "0 0 1.5rem 0" }}>Version 0.2.1-beta (Current Version)</p>
                     
                     <div style={{ display: "flex", gap: "0.75rem", justifyContent: "center" }}>
-                        <Button variant="outline" size="sm">Check for Updates</Button>
-                        <Button variant="ghost" size="sm">Changelog</Button>
+                        <Button variant="outline" size="sm" onClick={() => onNavigate("changelog")}>View Changelog</Button>
                     </div>
                 </div>
 
@@ -154,3 +156,4 @@ function AboutSection() {
         </div>
     );
 }
+

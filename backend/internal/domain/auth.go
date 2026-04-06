@@ -158,4 +158,5 @@ type AuthRepository interface {
 	GetRecoveryRecord(ctx context.Context, userID string) (RecoveryRecord, error)
 	UpdateLastRecoveryAt(ctx context.Context, userID string) error
 	UpdatePassword(ctx context.Context, input ResetPasswordInput) error
+	UpdateDisplayName(ctx context.Context, userID string, name string) error
 }

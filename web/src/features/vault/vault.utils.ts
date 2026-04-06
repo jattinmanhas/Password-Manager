@@ -52,7 +52,6 @@ export function normalizeSecret(input: unknown): VaultSecret {
         cardholderName: typeof value.cardholderName === "string" ? value.cardholderName : "",
         cardNumber: typeof value.cardNumber === "string" ? value.cardNumber : "",
         expiryDate: typeof value.expiryDate === "string" ? value.expiryDate : "",
-        cvv: typeof value.cvv === "string" ? value.cvv : "",
         cardType: (typeof value.cardType === "string" ? value.cardType : "other") as CardSecret["cardType"],
       };
     case "bank":

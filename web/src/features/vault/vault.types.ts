@@ -14,7 +14,6 @@ export interface CardFields {
   cardholderName: string;
   cardNumber: string;
   expiryDate: string;
-  cvv: string;
   cardType: "visa" | "mastercard" | "amex" | "other";
 }
 
@@ -43,6 +42,9 @@ export interface VaultViewItem {
   id: string;
   folderId?: string;
   updatedAt: string;
+  createdAt?: string;
+  deletedAt?: string;
+  version?: number;
   secret: VaultSecret | null;
   isCorrupted: boolean;
   vaultId: string;
@@ -88,3 +90,4 @@ export const DEFAULT_SECRET: VaultSecret = {
 
 export const DEFAULT_PERSONAL_VAULT_ID = "personal-main";
 export const DEFAULT_SHARED_VAULT_ID = "shared-family";
+export const TRASH_VAULT_ID = "system-trash";

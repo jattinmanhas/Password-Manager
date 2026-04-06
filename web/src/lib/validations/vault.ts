@@ -34,7 +34,6 @@ export const cardItemSchema = baseVaultItemSchema.extend({
   cardType: z.string(),
   expiryDate: z.string().regex(/^(0[1-9]|1[0-2])\/?([0-9]{2})$/, "Expiry must be in MM/YY format"),
   cardholderName: z.string().min(1, "Cardholder name is required"),
-  cvv: z.string().min(3, "CVV must be 3-4 digits").max(4, "CVV must be 3-4 digits").regex(/^\d+$/, "CVV must be numeric"),
 });
 
 export const bankItemSchema = baseVaultItemSchema.extend({

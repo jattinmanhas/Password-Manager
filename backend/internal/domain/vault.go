@@ -16,8 +16,25 @@ type VaultItem struct {
 	AlgoVersion string
 	Metadata    []byte
 	IsShared    bool
+	Version     int
 	CreatedAt   time.Time
 	UpdatedAt   time.Time
+	DeletedAt   *time.Time
+}
+
+type VaultItemVersion struct {
+	ID          string
+	ItemID      string
+	OwnerUserID string
+	FolderID    *string
+	Ciphertext  []byte
+	Nonce       []byte
+	WrappedDEK  []byte
+	WrapNonce   []byte
+	AlgoVersion string
+	Metadata    []byte
+	Version     int
+	CreatedAt   time.Time
 }
 
 type CreateVaultItemInput struct {
@@ -59,9 +76,12 @@ type CreateVaultFolderInput struct {
 type VaultRepository interface {
 	CreateVaultItem(ctx context.Context, input CreateVaultItemInput) (VaultItem, error)
 	ListVaultItemsByOwner(ctx context.Context, ownerUserID string) ([]VaultItem, error)
+	ListDeletedVaultItemsByOwner(ctx context.Context, ownerUserID string) ([]VaultItem, error)
 	GetVaultItemByIDForOwner(ctx context.Context, itemID string, ownerUserID string) (VaultItem, error)
+	ListVaultItemVersionsByOwner(ctx context.Context, itemID string, ownerUserID string) ([]VaultItemVersion, error)
 	UpdateVaultItemForOwner(ctx context.Context, itemID string, ownerUserID string, input UpdateVaultItemInput) (VaultItem, error)
 	DeleteVaultItemForOwner(ctx context.Context, itemID string, ownerUserID string) (bool, error)
+	RestoreVaultItemForOwner(ctx context.Context, itemID string, ownerUserID string) (VaultItem, error)
 	GetVaultSaltForUser(ctx context.Context, userID string) ([]byte, error)
 }
 

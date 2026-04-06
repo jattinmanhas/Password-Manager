@@ -30,5 +30,8 @@ migrate-down: ## Run manual migrations down
 migrate-drop: ## Drop all tables (force recovery)
 	go run cmd/migrate/main.go drop
 
+seed: ## Seed the database with test data
+	go run cmd/seed/main.go
+
 clean: ## Clean build output
 	rm -rf bin/

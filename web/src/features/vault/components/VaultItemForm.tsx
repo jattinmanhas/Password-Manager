@@ -54,7 +54,6 @@ export function VaultItemForm({
       ...((initialData as any).cardType && { cardType: (initialData as any).cardType }),
       ...((initialData as any).expiryDate && { expiryDate: (initialData as any).expiryDate }),
       ...((initialData as any).cardholderName && { cardholderName: (initialData as any).cardholderName }),
-      ...((initialData as any).cvv && { cvv: (initialData as any).cvv }),
       ...((initialData as any).bankName && { bankName: (initialData as any).bankName }),
       ...((initialData as any).accountNumber && { accountNumber: (initialData as any).accountNumber }),
       ...((initialData as any).ifscCode && { ifscCode: (initialData as any).ifscCode }),
@@ -176,7 +175,6 @@ export function VaultItemForm({
                       itemForm.setValue("cardholderName" as any, "");
                       itemForm.setValue("cardNumber" as any, "");
                       itemForm.setValue("expiryDate" as any, "");
-                      itemForm.setValue("cvv" as any, "");
                       itemForm.setValue("cardType" as any, "other");
                     } else if (newKind === "bank") {
                       itemForm.setValue("bankName" as any, "");
@@ -373,7 +371,7 @@ export function VaultItemForm({
                 />
               </div>
             </div>
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 1.5fr 1fr", gap: "1rem" }}>
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1.5fr", gap: "1rem" }}>
               <div className="form-group">
                 <Label htmlFor="card-expiry">Expiry</Label>
                 <Controller
@@ -403,17 +401,6 @@ export function VaultItemForm({
                   placeholder="John Doe"
                   {...itemForm.register("cardholderName" as "title")}
                   error={(itemForm.formState.errors as any).cardholderName?.message as string}
-                  disabled={saving}
-                />
-              </div>
-              <div className="form-group">
-                <Label htmlFor="card-cvv">CVV</Label>
-                <Input
-                  id="card-cvv"
-                  type="password"
-                  placeholder="123"
-                  {...itemForm.register("cvv" as "title")}
-                  error={(itemForm.formState.errors as any).cvv?.message as string}
                   disabled={saving}
                 />
               </div>

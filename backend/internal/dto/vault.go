@@ -32,12 +32,32 @@ type VaultItemResponse struct {
 	AlgoVersion string          `json:"algo_version"`
 	Metadata    json.RawMessage `json:"metadata,omitempty"`
 	IsShared    bool            `json:"is_shared"`
+	Version     int             `json:"version"`
 	CreatedAt   string          `json:"created_at"`
 	UpdatedAt   string          `json:"updated_at"`
+	DeletedAt   *string         `json:"deleted_at,omitempty"`
 }
 
 type VaultItemsResponse struct {
 	Items []VaultItemResponse `json:"items"`
+}
+
+type VaultItemVersionResponse struct {
+	ID          string          `json:"id"`
+	ItemID      string          `json:"item_id"`
+	FolderID    *string         `json:"folder_id,omitempty"`
+	Ciphertext  string          `json:"ciphertext"`
+	Nonce       string          `json:"nonce"`
+	WrappedDEK  string          `json:"wrapped_dek"`
+	WrapNonce   string          `json:"wrap_nonce"`
+	AlgoVersion string          `json:"algo_version"`
+	Metadata    json.RawMessage `json:"metadata,omitempty"`
+	Version     int             `json:"version"`
+	CreatedAt   string          `json:"created_at"`
+}
+
+type VaultItemVersionsResponse struct {
+	Versions []VaultItemVersionResponse `json:"versions"`
 }
 
 type CreateFolderRequest struct {

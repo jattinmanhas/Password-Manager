@@ -71,8 +71,25 @@ CREATE TABLE IF NOT EXISTS vault_items (
   wrap_nonce BYTEA NOT NULL,
   algo_version TEXT NOT NULL,
   metadata JSONB,
+  version INTEGER NOT NULL DEFAULT 1,
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  deleted_at TIMESTAMPTZ
+);
+
+CREATE TABLE IF NOT EXISTS vault_item_versions (
+  id UUID PRIMARY KEY,
+  item_id UUID NOT NULL REFERENCES vault_items(id) ON DELETE CASCADE,
+  owner_user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  folder_id UUID REFERENCES vault_folders(id) ON DELETE SET NULL,
+  ciphertext BYTEA NOT NULL,
+  nonce BYTEA NOT NULL,
+  dek_wrapped BYTEA NOT NULL,
+  wrap_nonce BYTEA NOT NULL,
+  algo_version TEXT NOT NULL,
+  metadata JSONB,
+  version INTEGER NOT NULL,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
 CREATE TABLE IF NOT EXISTS vault_shares (
@@ -147,6 +164,8 @@ CREATE TABLE IF NOT EXISTS family_memberships (
 );
 
 CREATE INDEX IF NOT EXISTS idx_vault_items_owner_user_id ON vault_items(owner_user_id);
+CREATE INDEX IF NOT EXISTS idx_vault_items_owner_deleted_at ON vault_items(owner_user_id, deleted_at);
+CREATE INDEX IF NOT EXISTS idx_vault_item_versions_item_id ON vault_item_versions(item_id);
 CREATE INDEX IF NOT EXISTS idx_sessions_user_id ON sessions(user_id);
 CREATE INDEX IF NOT EXISTS idx_sessions_refresh_token_hash ON sessions(refresh_token_hash);
 CREATE INDEX IF NOT EXISTS idx_audit_events_user_id ON audit_events(user_id);
@@ -167,6 +186,7 @@ DROP TABLE IF EXISTS audit_events CASCADE;
 DROP TABLE IF EXISTS sessions CASCADE;
 DROP TABLE IF EXISTS vault_attachments CASCADE;
 DROP TABLE IF EXISTS vault_shares CASCADE;
+DROP TABLE IF EXISTS vault_item_versions CASCADE;
 DROP TABLE IF EXISTS vault_items CASCADE;
 DROP TABLE IF EXISTS vault_folders CASCADE;
 DROP TABLE IF EXISTS user_keys CASCADE;
@@ -178,6 +198,18 @@ DROP TABLE IF EXISTS users CASCADE;
 func MigrateUp(ctx context.Context, db *sql.DB) error {
 	if _, err := db.ExecContext(ctx, UpSQL); err != nil {
 		return fmt.Errorf("run schema migration up: %w", err)
+	}
+	if _, err := db.ExecContext(ctx, `
+		ALTER TABLE vault_items
+		ADD COLUMN IF NOT EXISTS version INTEGER NOT NULL DEFAULT 1;
+	`); err != nil {
+		return fmt.Errorf("ensure vault_items.version exists: %w", err)
+	}
+	if _, err := db.ExecContext(ctx, `
+		ALTER TABLE vault_items
+		ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMPTZ;
+	`); err != nil {
+		return fmt.Errorf("ensure vault_items.deleted_at exists: %w", err)
 	}
 	return nil
 }

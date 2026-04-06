@@ -550,3 +550,23 @@ func nullableText(value string) any {
 	}
 	return value
 }
+
+func (r *AuthRepository) UpdateDisplayName(ctx context.Context, userID string, name string) error {
+	result, err := r.db.ExecContext(ctx, `
+		UPDATE users
+		SET name = $2, updated_at = NOW()
+		WHERE id = $1
+	`, userID, nullableText(name))
+	if err != nil {
+		return fmt.Errorf("update display name: %w", err)
+	}
+
+	affected, err := result.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("read rows affected: %w", err)
+	}
+	if affected == 0 {
+		return domain.ErrNotFound
+	}
+	return nil
+}

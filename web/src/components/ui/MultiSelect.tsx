@@ -63,8 +63,8 @@ export function MultiSelect({ options, value, onChange, placeholder = "Add tags.
     <div className={cn("flex flex-col gap-1.5", className)} ref={containerRef} style={{ position: "relative", opacity: disabled ? 0.6 : 1, pointerEvents: disabled ? "none" : "auto" }}>
       <div
         className={cn(
-          "flex flex-wrap items-center gap-2 px-3 py-2 bg-white border-2 border-gray-200 rounded-xl transition-all cursor-text",
-          isOpen && "border-blue-500 ring-4 ring-blue-500/10"
+          "flex flex-wrap items-center gap-2 transition-all cursor-text",
+          isOpen && "ring-4 ring-blue-500/10"
         )}
         onClick={() => !disabled && inputRef.current?.focus()}
         style={{
@@ -72,7 +72,7 @@ export function MultiSelect({ options, value, onChange, placeholder = "Add tags.
           borderRadius: "0.75rem",
           minHeight: "3rem",
           padding: "0.4rem 0.6rem",
-          backgroundColor: "#fff",
+          backgroundColor: "var(--color-white)",
           display: "flex",
           position: "relative",
           paddingRight: "2.5rem",
@@ -85,7 +85,7 @@ export function MultiSelect({ options, value, onChange, placeholder = "Add tags.
                 key={tag}
                 style={{
                 padding: "0.125rem 0.5rem",
-                backgroundColor: "rgba(37, 99, 235, 0.08)",
+                backgroundColor: "var(--color-blue-subtle)",
                 color: "var(--color-security-blue)",
                 borderRadius: "0.375rem",
                 fontSize: "0.75rem",
@@ -171,10 +171,10 @@ export function MultiSelect({ options, value, onChange, placeholder = "Add tags.
             left: 0,
             right: 0,
             marginTop: "0.5rem",
-            backgroundColor: "#fff",
+            backgroundColor: "var(--color-white)",
             border: "1px solid var(--color-border)",
             borderRadius: "0.75rem",
-            boxShadow: "0 10px 15px -3px rgba(0,0,0,0.1), 0 4px 6px -2px rgba(0,0,0,0.05)",
+            boxShadow: "var(--shadow-md)",
             zIndex: 1000,
             maxHeight: "15rem",
             overflowY: "auto",
@@ -194,7 +194,7 @@ export function MultiSelect({ options, value, onChange, placeholder = "Add tags.
                 fontWeight: 600,
                 borderBottom: filteredOptions.length > 0 ? "1px solid var(--color-border)" : "none",
               }}
-              onMouseEnter={(e) => e.currentTarget.style.backgroundColor = "rgba(37, 99, 235, 0.05)"}
+              onMouseEnter={(e) => e.currentTarget.style.backgroundColor = "var(--color-blue-subtle)"}
               onMouseLeave={(e) => e.currentTarget.style.backgroundColor = "transparent"}
             >
               <Plus size={16} /> Add "{inputValue}"
@@ -213,7 +213,7 @@ export function MultiSelect({ options, value, onChange, placeholder = "Add tags.
                 color: "var(--color-text-main)",
                 fontSize: "0.875rem",
               }}
-              onMouseEnter={(e) => e.currentTarget.style.backgroundColor = "rgba(0,0,0,0.02)"}
+              onMouseEnter={(e) => e.currentTarget.style.backgroundColor = "rgba(128, 128, 128, 0.1)"}
               onMouseLeave={(e) => e.currentTarget.style.backgroundColor = "transparent"}
             >
               {option}

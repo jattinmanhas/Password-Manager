@@ -120,3 +120,7 @@ type RecoveryResetResponse struct {
 	ExpiresAt   string `json:"expires_at"`
 	TOTPEnabled bool   `json:"is_totp_enabled"`
 }
+
+type UpdateProfileRequest struct {
+	Name string `json:"name"`
+}

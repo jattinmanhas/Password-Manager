@@ -137,6 +137,10 @@ func (m *mockAuthRepo) UpdatePassword(ctx context.Context, input domain.ResetPas
 	return nil
 }
 
+func (m *mockAuthRepo) UpdateDisplayName(ctx context.Context, userID string, name string) error {
+	return nil
+}
+
 func setupController(repo *mockAuthRepo) *controller.AuthController {
 	svc := service.NewAuthService(repo, nil, "pepper-test", time.Hour, "issuer")
 	return controller.NewAuthController(svc, controller.AuthCookieConfig{
