@@ -8,6 +8,7 @@ export type VaultSecretKind = "login" | "card" | "bank" | "note";
 export interface LoginFields {
   username: string;
   password: string;
+  url: string;
 }
 
 export interface CardFields {
@@ -85,6 +86,7 @@ export const DEFAULT_SECRET: VaultSecret = {
   title: "",
   username: "",
   password: "",
+  url: "",
   notes: "",
 };
 

@@ -13,11 +13,12 @@ import { Button } from "../../../components/ui/Button";
 import { Input } from "../../../components/ui/Input";
 import { Label } from "../../../components/ui/Label";
 import { 
-    randomBytes, toBase64, utf8ToBytes, deriveMasterKey, fromBase64,
+    randomBytes, toBase64, utf8ToBytes, fromBase64,
 } from "../../../crypto";
 import { 
-    createDefaultArgon2idKdf, createDefaultXChaCha20Poly1305 
+    createDefaultXChaCha20Poly1305 
 } from "../../../crypto/adapters";
+import { deriveMasterKeyWithWorker } from "../../../crypto/worker-client";
 
 // --- Helpers from RecoverySetup ---
 function generateRecoveryKey(): string {
@@ -232,7 +233,6 @@ function RecoveryCard() {
         setLoading(true);
         try {
             const aead = await createDefaultXChaCha20Poly1305();
-            const kdf = await createDefaultArgon2idKdf();
             const listed = await vaultService.listItems();
             const verifier = listed.items.find(i => {
                 const meta = i.metadata as any;
@@ -242,14 +242,13 @@ function RecoveryCard() {
             if (!verifier) throw new Error("Please unlock your vault first.");
             
             const salt = fromBase64((verifier.metadata as any).salt);
-            const derived = await deriveMasterKey({ password: vaultPassphrase, kdf, salt });
+            const derived = await deriveMasterKeyWithWorker({ password: vaultPassphrase, salt });
 
             // Wrap KEK
             const nonce = randomBytes(aead.nonceLength);
             const wrapped = await (async () => {
-                const recoveryKdf = await createDefaultArgon2idKdf();
                 const recoverySalt = randomBytes(16);
-                const recoveryDerived = await deriveMasterKey({ password: recoveryKey, kdf: recoveryKdf, salt: recoverySalt });
+                const recoveryDerived = await deriveMasterKeyWithWorker({ password: recoveryKey, salt: recoverySalt });
                 const wrappedKek = aead.encrypt({ key: recoveryDerived.key, nonce, plaintext: derived.key, associatedData: utf8ToBytes(KEK_WRAP_AAD) });
                 return { wrappedKek: toBase64(wrappedKek), wrapNonce: toBase64(nonce), kekSalt: toBase64(recoverySalt) };
             })();

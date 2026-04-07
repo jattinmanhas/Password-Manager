@@ -43,6 +43,56 @@ func (r *VaultRepository) CreateVaultItem(ctx context.Context, input domain.Crea
 	return item, nil
 }
 
+func (r *VaultRepository) CreateVaultItemsBulk(ctx context.Context, inputs []domain.CreateVaultItemInput) ([]domain.VaultItem, error) {
+	if len(inputs) == 0 {
+		return nil, nil
+	}
+
+	tx, err := r.db.BeginTx(ctx, &sql.TxOptions{})
+	if err != nil {
+		return nil, fmt.Errorf("begin bulk insert tx: %w", err)
+	}
+	defer func() {
+		_ = tx.Rollback()
+	}()
+
+	stmt, err := tx.PrepareContext(ctx, `
+		INSERT INTO vault_items (
+			id, owner_user_id, folder_id, ciphertext, nonce, dek_wrapped, wrap_nonce, algo_version, metadata, version, created_at, updated_at
+		)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, 1, NOW(), NOW())
+		RETURNING
+			id, owner_user_id, folder_id, ciphertext, nonce, dek_wrapped, wrap_nonce, algo_version, metadata,
+			(SELECT COUNT(*) > 0 FROM vault_shares vs WHERE vs.item_id = vault_items.id) as is_shared,
+			version, created_at, updated_at, deleted_at
+	`)
+	if err != nil {
+		return nil, fmt.Errorf("prepare bulk insert stmt: %w", err)
+	}
+	defer stmt.Close()
+
+	items := make([]domain.VaultItem, 0, len(inputs))
+	for _, input := range inputs {
+		itemID, err := util.NewUUID()
+		if err != nil {
+			return nil, err
+		}
+
+		row := stmt.QueryRowContext(ctx, itemID, input.OwnerUserID, input.FolderID, input.Ciphertext, input.Nonce, input.WrappedDEK, input.WrapNonce, input.AlgoVersion, nullableJSON(input.Metadata))
+		item, err := scanVaultItem(row)
+		if err != nil {
+			return nil, fmt.Errorf("insert vault item in bulk: %w", err)
+		}
+		items = append(items, item)
+	}
+
+	if err := tx.Commit(); err != nil {
+		return nil, fmt.Errorf("commit bulk insert tx: %w", err)
+	}
+
+	return items, nil
+}
+
 func (r *VaultRepository) ListVaultItemsByOwner(ctx context.Context, ownerUserID string) ([]domain.VaultItem, error) {
 	return r.listVaultItemsByOwner(ctx, ownerUserID, false)
 }

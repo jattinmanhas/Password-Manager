@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"log/slog"
 	"net/http"
 	"os"
@@ -19,6 +20,12 @@ import (
 
 func main() {
 	cfg := config.Load()
+
+	// Validate security-critical config (e.g. pepper) for production environments.
+	if err := cfg.ValidateForProduction(); err != nil {
+		fmt.Fprintln(os.Stderr, err.Error())
+		os.Exit(1)
+	}
 
 	// Initialise structured logger (writes to stdout + rotating file).
 	log, logFile := logger.New(cfg)

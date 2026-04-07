@@ -60,7 +60,7 @@ export function VaultItemRow({ item, isTrashView, onView, onEdit, onDelete, onRe
 
   if (kind === "login") {
     Icon = Lock;
-    subtitle = (secret as any).username;
+    subtitle = (secret as any).username || (secret as any).url;
   } else if (kind === "card") {
     Icon = CreditCard;
     subtitle = (secret as any).cardholderName || "Payment Card";

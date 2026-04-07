@@ -45,6 +45,35 @@ func (s *VaultService) CreateItem(ctx context.Context, userID string, input doma
 	return item, nil
 }
 
+func (s *VaultService) CreateItemsBulk(ctx context.Context, userID string, inputs []domain.CreateVaultItemInput) ([]domain.VaultItem, error) {
+	ownerUserID := strings.TrimSpace(userID)
+	if ownerUserID == "" {
+		return nil, domain.ErrUnauthorizedSession
+	}
+
+	validInputs := make([]domain.CreateVaultItemInput, 0, len(inputs))
+	for _, input := range inputs {
+		if err := validateVaultPayload(input.Ciphertext, input.Nonce, input.WrappedDEK, input.WrapNonce, input.AlgoVersion, input.Metadata); err != nil {
+			return nil, err
+		}
+		input.OwnerUserID = ownerUserID
+		validInputs = append(validInputs, input)
+	}
+
+	items, err := s.repo.CreateVaultItemsBulk(ctx, validInputs)
+	if err != nil {
+		return nil, fmt.Errorf("create vault items bulk: %w", err)
+	}
+
+	uid, _ := uuid.Parse(ownerUserID)
+	s.audit.LogEvent(ctx, &uid, domain.EventTypeVaultItemCreated, map[string]string{
+		"count": fmt.Sprintf("%d", len(items)),
+		"bulk":  "true",
+	})
+
+	return items, nil
+}
+
 func (s *VaultService) ListItems(ctx context.Context, userID string) ([]domain.VaultItem, error) {
 	ownerUserID := strings.TrimSpace(userID)
 	if ownerUserID == "" {

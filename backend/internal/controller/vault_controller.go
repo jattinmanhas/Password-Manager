@@ -17,10 +17,18 @@ import (
 type VaultController struct {
 	vault *service.VaultService
 	log   *slog.Logger
+	kdf   KDFConfig
 }
 
-func NewVaultController(vaultService *service.VaultService, logger *slog.Logger) *VaultController {
-	return &VaultController{vault: vaultService, log: logger}
+// KDFConfig holds the Argon2id parameters served to the frontend.
+type KDFConfig struct {
+	MemoryKiB   int `json:"memory_kib"`
+	Iterations  int `json:"iterations"`
+	Parallelism int `json:"parallelism"`
+}
+
+func NewVaultController(vaultService *service.VaultService, logger *slog.Logger, kdf KDFConfig) *VaultController {
+	return &VaultController{vault: vaultService, log: logger, kdf: kdf}
 }
 
 func (c *VaultController) HandleCreateItem(w http.ResponseWriter, r *http.Request, session domain.Session) {
@@ -51,6 +59,54 @@ func (c *VaultController) HandleCreateItem(w http.ResponseWriter, r *http.Reques
 	}
 
 	util.WriteJSON(w, http.StatusCreated, vaultItemToResponse(item))
+}
+
+func (c *VaultController) HandleBulkCreateItems(w http.ResponseWriter, r *http.Request, session domain.Session) {
+	var req dto.BulkCreateVaultItemsRequest
+	if err := util.ReadJSON(r, &req); err != nil {
+		util.WriteError(w, http.StatusBadRequest, "invalid_json", "invalid request body")
+		return
+	}
+
+	const maxBulk = 500
+	if len(req.Items) == 0 {
+		util.WriteError(w, http.StatusBadRequest, "empty_items", "no items provided")
+		return
+	}
+	if len(req.Items) > maxBulk {
+		util.WriteError(w, http.StatusBadRequest, "too_many_items", "maximum 500 items per bulk request")
+		return
+	}
+
+	inputs := make([]domain.CreateVaultItemInput, 0, len(req.Items))
+	for _, item := range req.Items {
+		parsed, err := parseUpsertVaultItemInput(item.Ciphertext, item.Nonce, item.WrappedDEK, item.WrapNonce, item.AlgoVersion, item.Metadata)
+		if err != nil {
+			util.WriteError(w, http.StatusBadRequest, "invalid_vault_payload", "one or more vault item payloads are invalid")
+			return
+		}
+		inputs = append(inputs, domain.CreateVaultItemInput{
+			FolderID:    item.FolderID,
+			Ciphertext:  parsed.Ciphertext,
+			Nonce:       parsed.Nonce,
+			WrappedDEK:  parsed.WrappedDEK,
+			WrapNonce:   parsed.WrapNonce,
+			AlgoVersion: parsed.AlgoVersion,
+			Metadata:    parsed.Metadata,
+		})
+	}
+
+	items, err := c.vault.CreateItemsBulk(r.Context(), session.UserID, inputs)
+	if err != nil {
+		c.writeVaultError(w, r, err, "failed to bulk create vault items")
+		return
+	}
+
+	resp := dto.VaultItemsResponse{Items: make([]dto.VaultItemResponse, 0, len(items))}
+	for _, item := range items {
+		resp.Items = append(resp.Items, vaultItemToResponse(item))
+	}
+	util.WriteJSON(w, http.StatusCreated, resp)
 }
 
 func (c *VaultController) HandleListItems(w http.ResponseWriter, r *http.Request, session domain.Session) {
@@ -282,4 +338,10 @@ func (c *VaultController) writeVaultError(w http.ResponseWriter, r *http.Request
 		c.log.ErrorContext(r.Context(), defaultMessage, slog.Any("error", err))
 		util.WriteError(w, http.StatusInternalServerError, "internal_error", defaultMessage)
 	}
+}
+
+// HandleGetKDFParams returns the server-configured Argon2id parameters.
+// This is a public endpoint — no auth required.
+func (c *VaultController) HandleGetKDFParams(w http.ResponseWriter, r *http.Request) {
+	util.WriteJSON(w, http.StatusOK, c.kdf)
 }

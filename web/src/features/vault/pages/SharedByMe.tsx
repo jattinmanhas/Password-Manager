@@ -2,14 +2,25 @@ import { useEffect, useState, useCallback } from "react";
 import { Share2, RefreshCw, Trash2, Mail, User, Calendar, ExternalLink, Shield } from "lucide-react";
 import toast from "react-hot-toast";
 import { sharingService } from "../services/sharing.service";
+import { vaultService } from "../services/vault.service";
 import { Button } from "../../../components/ui/Button";
 import { Dialog } from "../../../components/ui/Dialog";
 import type { SentShareResponse } from "../sharing.types";
+import { useVaultSession } from "../../../app/providers/VaultProvider";
+import { useAuth } from "../../../app/providers/AuthProvider";
+import { VaultUnlockScreen } from "../components/VaultUnlockScreen";
+import { encryptVaultItem, fromBase64, toBase64 } from "../../../crypto";
+import { deriveMasterKeyWithWorker, verifyVaultKeyWithWorker } from "../../../crypto/worker-client";
+import { getVerifierSalt, isVerifierItem, KEK_VERIFIER_KIND, KEK_VERIFIER_TOKEN } from "../vault.utils";
 
 export function SharedByMe() {
+  const { session } = useAuth();
+  const { aead, kek, isKekVerified, setVaultSession, setUserKeyPair } = useVaultSession();
   const [shares, setShares] = useState<SentShareResponse[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const [unlocking, setUnlocking] = useState(false);
+  const [unlockMode, setUnlockMode] = useState<"checking" | "setup" | "unlock">("checking");
   const [revokingId, setRevokingId] = useState<{ itemId: string; userId: string } | null>(null);
   const [isRevoking, setIsRevoking] = useState(false);
 
@@ -28,8 +39,130 @@ export function SharedByMe() {
   }, []);
 
   useEffect(() => {
-    void loadShares();
-  }, [loadShares]);
+    if (kek && isKekVerified) {
+      void loadShares();
+    }
+  }, [isKekVerified, kek, loadShares]);
+
+  useEffect(() => {
+    if (!session || !aead) {
+      setUnlockMode("checking");
+      return;
+    }
+    if (kek && isKekVerified) {
+      return;
+    }
+
+    let cancelled = false;
+    setUnlockMode("checking");
+
+    const detectVaultPassphrase = async () => {
+      try {
+        const listed = await vaultService.listItems();
+        const hasVerifier = listed.items.some(isVerifierItem);
+        if (!cancelled) {
+          setUnlockMode(hasVerifier ? "unlock" : "setup");
+        }
+      } catch {
+        if (!cancelled) {
+          setUnlockMode("unlock");
+        }
+      }
+    };
+
+    void detectVaultPassphrase();
+    return () => {
+      cancelled = true;
+    };
+  }, [aead, isKekVerified, kek, session]);
+
+  const handleUnlock = async (data: { masterPassword: string }) => {
+    if (!session || !aead || unlocking) return;
+    const passwordInput = data.masterPassword;
+    if (!passwordInput.trim()) {
+      setError("Vault passphrase is required");
+      return;
+    }
+
+    setError("");
+    setUnlocking(true);
+    try {
+      const listed = await vaultService.listItems();
+      const verifierItems = listed.items.filter(isVerifierItem);
+      if (verifierItems.length > 1) throw new Error("Multiple vault verifiers detected.");
+      const existingVerifier = verifierItems[0] ?? null;
+      let activeKey: Uint8Array;
+
+      if (existingVerifier) {
+        const salt = getVerifierSalt(existingVerifier);
+        if (!salt) throw new Error("Vault verifier is invalid.");
+
+        const verification = await verifyVaultKeyWithWorker({
+          password: passwordInput,
+          salt,
+          payload: {
+            version: "xchacha20poly1305-v1",
+            nonce: existingVerifier.nonce,
+            ciphertext: existingVerifier.ciphertext,
+            wrappedDek: existingVerifier.wrapped_dek,
+            wrapNonce: existingVerifier.wrap_nonce,
+          },
+        });
+
+        if (!verification.verified || !verification.derived) throw new Error("Incorrect vault passphrase");
+        activeKey = verification.derived.key;
+        setVaultSession(activeKey, existingVerifier, true);
+      } else {
+        const saltResp = await vaultService.getVaultSalt();
+        const salt = fromBase64(saltResp.salt);
+        const derived = await deriveMasterKeyWithWorker({ password: passwordInput, salt });
+        activeKey = derived.key;
+
+        const payload = encryptVaultItem({
+          plaintext: KEK_VERIFIER_TOKEN,
+          kek: derived.key,
+          aead,
+        });
+        const createdVerifier = await vaultService.createItem({
+          ciphertext: payload.ciphertext,
+          nonce: payload.nonce,
+          wrapped_dek: payload.wrappedDek,
+          wrap_nonce: payload.wrapNonce,
+          algo_version: payload.version,
+          metadata: { kind: KEK_VERIFIER_KIND, salt: toBase64(salt) },
+        });
+        setVaultSession(activeKey, createdVerifier, true);
+      }
+
+      try {
+        const { generateX25519KeyPair, encryptPrivateKey, decryptPrivateKey } = await import("../../../crypto/sharing");
+        const existing = await sharingService.getMyKeys();
+        if (existing.has_keys) {
+          const encPriv = fromBase64(existing.encrypted_private_keys);
+          const nonce = fromBase64(existing.nonce);
+          const privKey = decryptPrivateKey(encPriv, nonce, activeKey, aead);
+          setUserKeyPair(fromBase64(existing.public_key_x25519), privKey);
+        } else {
+          const kp = await generateX25519KeyPair();
+          const { encryptedPrivateKey, nonce } = encryptPrivateKey(kp.privateKey, activeKey, aead);
+          await sharingService.upsertUserKeys({
+            public_key_x25519: toBase64(kp.publicKey),
+            encrypted_private_keys: toBase64(encryptedPrivateKey),
+            nonce: toBase64(nonce),
+          });
+          setUserKeyPair(kp.publicKey, kp.privateKey);
+        }
+      } catch (e) {
+        console.warn("Key bootstrap failed:", e);
+      }
+
+      toast.success("Vault unlocked");
+    } catch (err: any) {
+      setError(err?.message || "Failed to unlock vault");
+    } finally {
+      setUnlocking(false);
+    }
+  };
 
   const handleRevoke = async () => {
     if (!revokingId) return;
@@ -54,6 +187,18 @@ export function SharedByMe() {
       return titleRaw || "Untitled Secret";
     }
   };
+
+  if (!kek || !isKekVerified) {
+    return (
+      <VaultUnlockScreen
+        unlocking={unlocking}
+        aead={aead}
+        error={error}
+        mode={unlockMode}
+        onSubmit={handleUnlock}
+      />
+    );
+  }
 
   return (
     <div style={{ maxWidth: "1000px", margin: "0 auto", paddingBottom: "2rem" }}>

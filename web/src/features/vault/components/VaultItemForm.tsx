@@ -50,6 +50,7 @@ export function VaultItemForm({
       tags: initialData.tags || [],
       ...((initialData as any).username && { username: (initialData as any).username }),
       ...((initialData as any).password && { password: (initialData as any).password }),
+      ...((initialData as any).url && { url: (initialData as any).url }),
       ...((initialData as any).cardNumber && { cardNumber: (initialData as any).cardNumber }),
       ...((initialData as any).cardType && { cardType: (initialData as any).cardType }),
       ...((initialData as any).expiryDate && { expiryDate: (initialData as any).expiryDate }),
@@ -171,6 +172,7 @@ export function VaultItemForm({
                     if (newKind === "login") {
                       itemForm.setValue("username" as any, "");
                       itemForm.setValue("password" as any, "");
+                      itemForm.setValue("url" as any, "");
                     } else if (newKind === "card") {
                       itemForm.setValue("cardholderName" as any, "");
                       itemForm.setValue("cardNumber" as any, "");
@@ -243,6 +245,17 @@ export function VaultItemForm({
                 placeholder="e.g. user@email.com"
                 {...itemForm.register("username" as "title")} // Using typecast since discriminated union in TS may not perfectly merge register keys
                 error={(itemForm.formState.errors as any).username?.message as string}
+                disabled={saving}
+              />
+            </div>
+            <div className="form-group">
+              <Label htmlFor="item-url">Website URL</Label>
+              <Input
+                id="item-url"
+                type="text"
+                placeholder="https://example.com"
+                {...itemForm.register("url" as "title")}
+                error={(itemForm.formState.errors as any).url?.message as string}
                 disabled={saving}
               />
             </div>

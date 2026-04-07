@@ -22,6 +22,10 @@ type UpdateVaultItemRequest struct {
 	Metadata    json.RawMessage `json:"metadata"`
 }
 
+type BulkCreateVaultItemsRequest struct {
+	Items []CreateVaultItemRequest `json:"items"`
+}
+
 type VaultItemResponse struct {
 	ID          string          `json:"id"`
 	FolderID    *string         `json:"folder_id,omitempty"`

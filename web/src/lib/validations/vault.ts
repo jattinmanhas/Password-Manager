@@ -26,6 +26,7 @@ export const loginItemSchema = baseVaultItemSchema.extend({
   kind: z.literal("login"),
   username: z.string().optional(),
   password: z.string().min(1, "Password is required"),
+  url: z.string().optional(),
 });
 
 export const cardItemSchema = baseVaultItemSchema.extend({

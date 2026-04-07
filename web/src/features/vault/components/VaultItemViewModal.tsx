@@ -214,6 +214,7 @@ export function VaultItemViewModal({ item, vaultName, onClose, onShare }: VaultI
           {kind === "login" && (
             <>
               <FieldView label="Username / Email" value={(secret as any).username} />
+              <FieldView label="Website URL" value={(secret as any).url} />
               <FieldView label="Password" value={(secret as any).password} sensitive />
             </>
           )}

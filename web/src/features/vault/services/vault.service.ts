@@ -4,6 +4,7 @@ import {
   CreateVaultItemRequest,
   FolderResponse,
   FoldersResponse,
+  KDFParamsResponse,
   UpdateVaultItemRequest,
   VaultItemResponse,
   VaultItemVersionsResponse,
@@ -27,6 +28,9 @@ export const vaultService = {
   createItem(req: CreateVaultItemRequest) {
     return request<VaultItemResponse>("POST", "/vault/items", req);
   },
+  bulkCreateItems(req: { items: CreateVaultItemRequest[] }) {
+    return request<VaultItemsResponse>("POST", "/vault/items/bulk", req);
+  },
   updateItem(itemId: string, req: UpdateVaultItemRequest) {
     return request<VaultItemResponse>("PUT", `/vault/items/${itemId}`, req);
   },
@@ -38,6 +42,9 @@ export const vaultService = {
   },
   getVaultSalt() {
     return request<VaultSaltResponse>("GET", "/vault/salt");
+  },
+  getKDFParams() {
+    return request<KDFParamsResponse>("GET", "/vault/kdf-params");
   },
 
   // Folders

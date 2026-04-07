@@ -11,13 +11,12 @@ import {
     randomBytes,
     toBase64,
     utf8ToBytes,
-    deriveMasterKey,
     type XChaCha20Poly1305Aead,
 } from "../../../crypto";
 import {
-    createDefaultArgon2idKdf,
     createDefaultXChaCha20Poly1305,
 } from "../../../crypto/adapters";
+import { deriveMasterKeyWithWorker, verifyVaultKeyWithWorker } from "../../../crypto/worker-client";
 import { vaultService } from "../../vault/services/vault.service";
 
 function generateRecoveryKey(): string {
@@ -51,13 +50,10 @@ async function wrapKekForRecovery(
     recoveryKey: string,
     aead: XChaCha20Poly1305Aead,
 ): Promise<{ wrappedKek: string; wrapNonce: string; kekSalt: string }> {
-    const kdf = await createDefaultArgon2idKdf();
-
     const salt = randomBytes(MASTER_KEY_SALT_LENGTH);
 
-    const derived = await deriveMasterKey({
+    const derived = await deriveMasterKeyWithWorker({
         password: recoveryKey,
-        kdf,
         salt,
     });
 
@@ -156,7 +152,6 @@ export function RecoverySetup() {
 
             if (vaultPassphrase.trim()) {
                 const aead = await createDefaultXChaCha20Poly1305();
-                const kdf = await createDefaultArgon2idKdf();
 
                 const listedItems = await vaultService.listItems();
                 const verifierItem = listedItems.items.find((item) => {
@@ -182,32 +177,23 @@ export function RecoverySetup() {
                     throw new Error("Vault verifier salt has invalid length.");
                 }
 
-                const derived = await deriveMasterKey({
+                const verification = await verifyVaultKeyWithWorker({
                     password: vaultPassphrase,
-                    kdf,
                     salt,
+                    payload: {
+                        version: "xchacha20poly1305-v1",
+                        nonce: verifierItem.nonce,
+                        ciphertext: verifierItem.ciphertext,
+                        wrappedDek: verifierItem.wrapped_dek,
+                        wrapNonce: verifierItem.wrap_nonce,
+                    },
                 });
-
-                const { decryptVaultItem } = await import("../../../crypto");
-                try {
-                    decryptVaultItem({
-                        payload: {
-                            version: "xchacha20poly1305-v1",
-                            nonce: verifierItem.nonce,
-                            ciphertext: verifierItem.ciphertext,
-                            wrappedDek: verifierItem.wrapped_dek,
-                            wrapNonce: verifierItem.wrap_nonce,
-                        },
-                        kek: derived.key,
-                        aead,
-                    });
-                } catch {
-                    derived.key.fill(0);
+                if (!verification.verified || !verification.derived) {
                     throw new Error("Incorrect vault passphrase. Please try again.");
                 }
 
-                const wrapped = await wrapKekForRecovery(derived.key, recoveryKey, aead);
-                derived.key.fill(0);
+                const wrapped = await wrapKekForRecovery(verification.derived.key, recoveryKey, aead);
+                verification.derived.key.fill(0);
 
                 wrappedKekPayload = {
                     wrapped_kek: wrapped.wrappedKek,

@@ -1,12 +1,13 @@
 import { useState } from "react";
-import { User, Shield, Palette, Info, ChevronRight, History } from "lucide-react";
+import { User, Shield, Palette, Info, ChevronRight, History, Database } from "lucide-react";
 import { ProfileSection } from "../components/ProfileSection";
 import { SecuritySection } from "../components/SecuritySection";
 import { AppearanceSection } from "../components/AppearanceSection";
 import { ChangelogSection } from "../components/ChangelogSection";
+import { DataSection } from "../components/DataSection";
 import { Button } from "../../../components/ui/Button";
 
-type SettingsTab = "profile" | "security" | "appearance" | "about" | "changelog";
+type SettingsTab = "profile" | "security" | "appearance" | "about" | "changelog" | "data";
 
 export function Settings() {
     const [activeTab, setActiveTab] = useState<SettingsTab>("profile");
@@ -15,6 +16,7 @@ export function Settings() {
         { id: "profile", label: "Profile", icon: User, description: "Personal info & account" },
         { id: "security", label: "Security", icon: Shield, description: "2FA & recovery" },
         { id: "appearance", label: "Appearance", icon: Palette, description: "Theme & interface" },
+        { id: "data", label: "Data", icon: Database, description: "Import & export" },
         { id: "changelog", label: "Changelog", icon: History, description: "Updates & version history" },
         { id: "about", label: "About", icon: Info, description: "System info" }
     ] as const;
@@ -25,6 +27,7 @@ export function Settings() {
             case "security": return <SecuritySection />;
             case "appearance": return <AppearanceSection />;
             case "changelog": return <ChangelogSection />;
+            case "data": return <DataSection />;
             case "about": return <AboutSection onNavigate={setActiveTab} />;
             default: return <ProfileSection />;
         }

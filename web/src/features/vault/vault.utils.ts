@@ -75,6 +75,7 @@ export function normalizeSecret(input: unknown): VaultSecret {
         kind: "login",
         username: typeof value.username === "string" ? value.username : "",
         password: typeof value.password === "string" ? value.password : "",
+        url: typeof value.url === "string" ? value.url : "",
       };
   }
 }

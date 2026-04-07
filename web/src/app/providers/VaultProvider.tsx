@@ -1,4 +1,4 @@
-import { createContext, useContext, useState, ReactNode, useCallback, useEffect } from "react";
+import { createContext, useContext, useState, ReactNode, useCallback, useEffect, useRef } from "react";
 import type { XChaCha20Poly1305Aead } from "../../crypto";
 import type { VaultItemResponse } from "../../features/vault/types";
 import type { VaultViewItem } from "../../features/vault/vault.types";
@@ -55,7 +55,11 @@ export function VaultProvider({ children }: { children: ReactNode }) {
 
   const setVaultSession = useCallback(
     (newKek: Uint8Array, newVerifierItem: VaultItemResponse, verified = true) => {
-      setKek(newKek);
+      // Wipe previous KEK before replacing it to prevent lingering in memory.
+      setKek((prev) => {
+        wipeKeyMaterial(prev);
+        return newKek;
+      });
       setVerifierItem(newVerifierItem);
       setIsKekVerified(verified);
     },
@@ -91,6 +95,23 @@ export function VaultProvider({ children }: { children: ReactNode }) {
       lockVault();
     }
   }, [session, lockVault]);
+
+  // Wipe key material from memory when the tab/window is closed.
+  // Uses refs so the handler always accesses the latest values without
+  // needing to be re-bound on every state change.
+  const kekRef = useRef(kek);
+  const privateKeyRef = useRef(userPrivateKey);
+  kekRef.current = kek;
+  privateKeyRef.current = userPrivateKey;
+
+  useEffect(() => {
+    const handleBeforeUnload = () => {
+      wipeKeyMaterial(kekRef.current);
+      wipeKeyMaterial(privateKeyRef.current);
+    };
+    window.addEventListener("beforeunload", handleBeforeUnload);
+    return () => window.removeEventListener("beforeunload", handleBeforeUnload);
+  }, []);
 
   return (
     <VaultContext.Provider

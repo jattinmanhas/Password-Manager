@@ -75,6 +75,7 @@ type CreateVaultFolderInput struct {
 
 type VaultRepository interface {
 	CreateVaultItem(ctx context.Context, input CreateVaultItemInput) (VaultItem, error)
+	CreateVaultItemsBulk(ctx context.Context, inputs []CreateVaultItemInput) ([]VaultItem, error)
 	ListVaultItemsByOwner(ctx context.Context, ownerUserID string) ([]VaultItem, error)
 	ListDeletedVaultItemsByOwner(ctx context.Context, ownerUserID string) ([]VaultItem, error)
 	GetVaultItemByIDForOwner(ctx context.Context, itemID string, ownerUserID string) (VaultItem, error)

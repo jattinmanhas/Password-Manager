@@ -68,3 +68,9 @@ export interface CreateFolderRequest {
   name_ciphertext: string;
   nonce: string;
 }
+
+export interface KDFParamsResponse {
+  memory_kib: number;
+  iterations: number;
+  parallelism: number;
+}

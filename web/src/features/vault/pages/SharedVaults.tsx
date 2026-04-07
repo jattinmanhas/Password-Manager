@@ -8,14 +8,12 @@ import { VaultUnlockScreen } from "../components/VaultUnlockScreen";
 import { Button } from "../../../components/ui/Button";
 import type { SharedItemResponse } from "../sharing.types";
 import type { VaultSecret, VaultSecretKind } from "../vault.types";
-import { fromBase64 } from "../../../crypto";
-import { normalizeSecret } from "../vault.utils";
+import { encryptVaultItem, fromBase64, toBase64 } from "../../../crypto";
+import { normalizeSecret, KEK_VERIFIER_KIND, KEK_VERIFIER_TOKEN } from "../vault.utils";
 import { useAuth } from "../../../app/providers/AuthProvider";
 import { vaultService } from "../services/vault.service";
-import { deriveMasterKey } from "../../../crypto";
-import { decryptVaultItem } from "../../../crypto";
-import { createDefaultArgon2idKdf } from "../../../crypto/adapters";
-import { getVerifierSalt, isVerifierItem, KEK_VERIFIER_TOKEN_BYTES, constantTimeEquals } from "../vault.utils";
+import { deriveMasterKeyWithWorker, verifyVaultKeyWithWorker } from "../../../crypto/worker-client";
+import { getVerifierSalt, isVerifierItem } from "../vault.utils";
 import { VaultItemViewModal } from "../components/VaultItemViewModal";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -78,7 +76,7 @@ function SharedItemCard({ item }: { item: DecryptedSharedItem }) {
   const subLabel = (): string | undefined => {
     const s = item.secret;
     if (!s) return undefined;
-    if (s.kind === "login") return (s as any).username;
+    if (s.kind === "login") return (s as any).username || (s as any).url;
     if (s.kind === "card") return (s as any).cardholderName;
     if (s.kind === "bank") return (s as any).bankName;
     return undefined;
@@ -220,6 +218,7 @@ export function SharedVaults() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [unlocking, setUnlocking] = useState(false);
+  const [unlockMode, setUnlockMode] = useState<"checking" | "setup" | "unlock">("checking");
   const [selectedItem, setSelectedItem] = useState<DecryptedSharedItem | null>(null);
 
   // ── Decrypt and load shared items ──────────────────────────────────────────
@@ -279,6 +278,38 @@ export function SharedVaults() {
     }
   }, [aead, userPrivateKey, isKekVerified, loadSharedItems]);
 
+  useEffect(() => {
+    if (!session || !aead) {
+      setUnlockMode("checking");
+      return;
+    }
+    if (kek && isKekVerified) {
+      return;
+    }
+
+    let cancelled = false;
+    setUnlockMode("checking");
+
+    const detectVaultPassphrase = async () => {
+      try {
+        const listed = await vaultService.listItems();
+        const hasVerifier = listed.items.some(isVerifierItem);
+        if (!cancelled) {
+          setUnlockMode(hasVerifier ? "unlock" : "setup");
+        }
+      } catch {
+        if (!cancelled) {
+          setUnlockMode("unlock");
+        }
+      }
+    };
+
+    void detectVaultPassphrase();
+    return () => {
+      cancelled = true;
+    };
+  }, [aead, isKekVerified, kek, session]);
+
   // ── Unlock handler (mirrors Vault.tsx logic) ───────────────────────────────
   const handleUnlock = async (data: { masterPassword: string }) => {
     if (!session || !aead || unlocking) return;
@@ -292,36 +323,48 @@ export function SharedVaults() {
       const verifierItems = listed.items.filter(isVerifierItem);
       if (verifierItems.length > 1) throw new Error("Multiple vault verifiers detected.");
       const existingVerifier = verifierItems[0] ?? null;
-      if (!existingVerifier) throw new Error("No vault verifier found. Please unlock from the Vault page first.");
+      let activeKey: Uint8Array;
 
-      const salt = getVerifierSalt(existingVerifier);
-      if (!salt) throw new Error("Vault verifier is invalid.");
+      if (existingVerifier) {
+        const salt = getVerifierSalt(existingVerifier);
+        if (!salt) throw new Error("Vault verifier is invalid.");
 
-      const kdf = await createDefaultArgon2idKdf();
-      const derived = await deriveMasterKey({ password: passwordInput, kdf, salt });
+        const verification = await verifyVaultKeyWithWorker({
+          password: passwordInput,
+          salt,
+          payload: {
+            version: "xchacha20poly1305-v1",
+            nonce: existingVerifier.nonce,
+            ciphertext: existingVerifier.ciphertext,
+            wrappedDek: existingVerifier.wrapped_dek,
+            wrapNonce: existingVerifier.wrap_nonce,
+          },
+        });
 
-      const verified = (() => {
-        try {
-          const token = decryptVaultItem({
-            payload: {
-              version: "xchacha20poly1305-v1",
-              nonce: existingVerifier.nonce,
-              ciphertext: existingVerifier.ciphertext,
-              wrappedDek: existingVerifier.wrapped_dek,
-              wrapNonce: existingVerifier.wrap_nonce,
-            },
-            kek: derived.key,
-            aead,
-          });
-          return constantTimeEquals(new TextEncoder().encode(token), KEK_VERIFIER_TOKEN_BYTES);
-        } catch {
-          return false;
-        }
-      })();
+        if (!verification.verified || !verification.derived) throw new Error("Incorrect vault passphrase");
+        activeKey = verification.derived.key;
+        setVaultSession(activeKey, existingVerifier, true);
+      } else {
+        const saltResp = await vaultService.getVaultSalt();
+        const salt = fromBase64(saltResp.salt);
+        const derived = await deriveMasterKeyWithWorker({ password: passwordInput, salt });
+        activeKey = derived.key;
 
-      if (!verified) throw new Error("Incorrect vault passphrase");
-
-      setVaultSession(derived.key, existingVerifier, true);
+        const payload = encryptVaultItem({
+          plaintext: KEK_VERIFIER_TOKEN,
+          kek: derived.key,
+          aead,
+        });
+        const createdVerifier = await vaultService.createItem({
+          ciphertext: payload.ciphertext,
+          nonce: payload.nonce,
+          wrapped_dek: payload.wrappedDek,
+          wrap_nonce: payload.wrapNonce,
+          algo_version: payload.version,
+          metadata: { kind: KEK_VERIFIER_KIND, salt: toBase64(salt) },
+        });
+        setVaultSession(activeKey, createdVerifier, true);
+      }
 
       // Bootstrap user keys for decryption
       try {
@@ -330,12 +373,11 @@ export function SharedVaults() {
         if (existing.has_keys) {
           const encPriv = fromBase64(existing.encrypted_private_keys);
           const nonce = fromBase64(existing.nonce);
-          const privKey = decryptPrivateKey(encPriv, nonce, derived.key, aead);
+          const privKey = decryptPrivateKey(encPriv, nonce, activeKey, aead);
           setUserKeyPair(fromBase64(existing.public_key_x25519), privKey);
         } else {
           const kp = await generateX25519KeyPair();
-          const { encryptedPrivateKey, nonce } = encryptPrivateKey(kp.privateKey, derived.key, aead);
-          const { toBase64 } = await import("../../../crypto");
+          const { encryptedPrivateKey, nonce } = encryptPrivateKey(kp.privateKey, activeKey, aead);
           await sharingService.upsertUserKeys({
             public_key_x25519: toBase64(kp.publicKey),
             encrypted_private_keys: toBase64(encryptedPrivateKey),
@@ -362,6 +404,7 @@ export function SharedVaults() {
         unlocking={unlocking}
         aead={aead}
         error={error}
+        mode={unlockMode}
         onSubmit={handleUnlock}
       />
     );

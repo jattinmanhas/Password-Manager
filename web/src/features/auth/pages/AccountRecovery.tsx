@@ -20,14 +20,13 @@ import {
     toBase64,
     fromBase64,
     utf8ToBytes,
-    deriveMasterKey,
     encryptVaultItem,
 } from "../../../crypto";
 import {
-    createDefaultArgon2idKdf,
     createDefaultXChaCha20Poly1305,
 } from "../../../crypto/adapters";
 import { vaultService } from "../../vault/services/vault.service";
+import { deriveMasterKeyWithWorker } from "../../../crypto/worker-client";
 
 type Step = "verify" | "totp" | "reset" | "done";
 
@@ -400,13 +399,11 @@ async function reEncryptVaultForNewPassword(
     kekSaltB64: string,
 ): Promise<void> {
     const aead = await createDefaultXChaCha20Poly1305();
-    const kdf = await createDefaultArgon2idKdf();
 
     // 1. Derive the recovery wrapping key from the recovery key + stored salt
     const recoveryKekSalt = fromBase64(kekSaltB64);
-    const recoveryDerived = await deriveMasterKey({
+    const recoveryDerived = await deriveMasterKeyWithWorker({
         password: recoveryKey,
-        kdf,
         salt: recoveryKekSalt,
     });
 
@@ -424,9 +421,8 @@ async function reEncryptVaultForNewPassword(
 
     // 3. Derive the new KEK from the new password
     const newSalt = randomBytes(MASTER_KEY_SALT_LENGTH);
-    const newDerived = await deriveMasterKey({
+    const newDerived = await deriveMasterKeyWithWorker({
         password: newPassword,
-        kdf,
         salt: newSalt,
     });
 

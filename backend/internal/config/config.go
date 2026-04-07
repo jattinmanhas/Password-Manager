@@ -1,7 +1,9 @@
 package config
 
 import (
+	"fmt"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/joho/godotenv"
@@ -19,6 +21,12 @@ type Config struct {
 	TOTPIssuer        string
 	FrontendOrigin    string
 	SessionCookieName string
+
+	// KDF (Argon2id) parameters for vault key derivation.
+	// These are served to the frontend via a public API endpoint.
+	KDFMemoryKiB   int
+	KDFIterations  int
+	KDFParallelism int
 
 	// Logging
 	LogLevel       string
@@ -45,6 +53,11 @@ func Load() Config {
 		FrontendOrigin:    getenv("FRONTEND_ORIGIN", "http://localhost:5173"),
 		SessionCookieName: getenv("SESSION_COOKIE_NAME", "pmv2_session"),
 
+		// KDF defaults match the crypto spec: 64MB, 3 iterations, parallelism 2.
+		KDFMemoryKiB:   mustInt(getenv("KDF_MEMORY_KIB", "65536")),
+		KDFIterations:  mustInt(getenv("KDF_ITERATIONS", "3")),
+		KDFParallelism: mustInt(getenv("KDF_PARALLELISM", "2")),
+
 		// Logging
 		LogLevel:      getenv("LOG_LEVEL", "info"),
 		LogFormat:     getenv("LOG_FORMAT", "text"),
@@ -61,6 +74,25 @@ func getenv(key, fallback string) string {
 		return fallback
 	}
 	return val
+}
+
+// ValidateForProduction checks security-critical config values.
+// It returns an error if the pepper is the default dev value or too short
+// when running in a production environment.
+func (c Config) ValidateForProduction() error {
+	env := strings.ToLower(strings.TrimSpace(c.Env))
+	isProduction := env == "prod" || env == "production" || env == "staging"
+
+	if isProduction {
+		if c.AuthPepper == "pmv2-dev-pepper-change-me" {
+			return fmt.Errorf("FATAL: AUTH_TOKEN_PEPPER is set to the default dev value in a %q environment. Set a unique, strong pepper via the AUTH_TOKEN_PEPPER env var", c.Env)
+		}
+		if len(c.AuthPepper) < 32 {
+			return fmt.Errorf("FATAL: AUTH_TOKEN_PEPPER is too short (%d chars). Use at least 32 characters for production", len(c.AuthPepper))
+		}
+	}
+
+	return nil
 }
 
 func mustDuration(value string) time.Duration {

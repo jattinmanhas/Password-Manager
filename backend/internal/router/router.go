@@ -67,7 +67,11 @@ func NewRouter(cfg config.Config, logger *slog.Logger, auditService *service.Aud
 		Secure: isProductionEnv(cfg.Env),
 	}, logger)
 	auditController := controller.NewAuditController(auditService, logger)
-	vaultController := controller.NewVaultController(vaultService, logger)
+	vaultController := controller.NewVaultController(vaultService, logger, controller.KDFConfig{
+		MemoryKiB:   cfg.KDFMemoryKiB,
+		Iterations:  cfg.KDFIterations,
+		Parallelism: cfg.KDFParallelism,
+	})
 	folderController := controller.NewFolderController(folderService, logger)
 	sharingController := controller.NewSharingController(sharingService, logger)
 	familyController := controller.NewFamilyController(familyService, logger)
@@ -122,8 +126,10 @@ func NewRouter(cfg config.Config, logger *slog.Logger, auditService *service.Aud
 	folders.Handle(http.MethodDelete, "/{folder_id}", authMiddleware.WithSession(folderController.HandleDeleteFolder))
 
 	// Vault routes
+	vault.Handle(http.MethodGet, "/kdf-params", vaultController.HandleGetKDFParams) // Public — no auth
 	vault.Handle(http.MethodGet, "/salt", authMiddleware.WithSession(vaultController.HandleGetVaultSalt))
 	vault.Handle(http.MethodPost, "/items", authMiddleware.WithSession(vaultController.HandleCreateItem))
+	vault.Handle(http.MethodPost, "/items/bulk", authMiddleware.WithSession(vaultController.HandleBulkCreateItems))
 	vault.Handle(http.MethodGet, "/items", authMiddleware.WithSession(vaultController.HandleListItems))
 	vault.Handle(http.MethodGet, "/items/trash", authMiddleware.WithSession(vaultController.HandleListDeletedItems))
 	vault.Handle(http.MethodGet, "/items/{item_id}", authMiddleware.WithSession(vaultController.HandleGetItem))
