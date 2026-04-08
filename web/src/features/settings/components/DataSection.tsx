@@ -65,7 +65,7 @@ function ExportCard() {
         </p>
       </div>
 
-      <div style={footerStyle}>
+      <div className="flex-responsive" style={footerStyle}>
         <span style={{ fontSize: "0.8125rem", color: "var(--color-text-subtle)" }}>
           {items.filter((i) => !i.isCorrupted && i.vaultType !== "shared").length} items ready for export
         </span>
@@ -357,7 +357,7 @@ function ImportCard() {
         </div>
       )}
 
-      <div style={{ ...footerStyle, marginTop: "1.25rem" }}>
+      <div className="flex-responsive" style={{ ...footerStyle, marginTop: "1.25rem" }}>
         <span style={{ fontSize: "0.8125rem", color: "var(--color-text-subtle)" }}>
           Items are always encrypted locally before upload
         </span>

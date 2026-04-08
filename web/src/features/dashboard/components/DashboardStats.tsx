@@ -37,7 +37,7 @@ export const DashboardStats: React.FC<DashboardStatsProps> = ({
   return (
     <div className="dashboard-stats-container" style={{ marginBottom: '2.5rem' }}>
       {/* Featured Security Health Card */}
-      <Card style={{ 
+      <Card className="flex-responsive" style={{ 
         padding: '2rem', 
         marginBottom: '1.5rem',
         display: 'flex', 
@@ -146,7 +146,7 @@ export const DashboardStats: React.FC<DashboardStatsProps> = ({
       </Card>
 
       {/* 3-Column Stats Grid */}
-      <div className="dashboard-stats-grid" style={{ 
+      <div className="dashboard-stats-grid grid-responsive" style={{ 
         display: 'grid', 
         gridTemplateColumns: 'repeat(3, 1fr)', 
         gap: '1.25rem'
@@ -224,7 +224,7 @@ export const DashboardStats: React.FC<DashboardStatsProps> = ({
               Security Health Breakdown
             </h3>
           </div>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: '0.75rem' }}>
+          <div className="grid-responsive" style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: '0.75rem' }}>
             {[
               { label: 'Account', value: breakdown.accountScore },
               { label: 'Passwords', value: breakdown.passwordScore },

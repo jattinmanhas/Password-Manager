@@ -134,7 +134,7 @@ export function Dashboard() {
         onLockVault={handleLockVault}
       />
 
-      <div className="dashboard-main-grid" style={{ display: 'grid', gridTemplateColumns: '1fr 340px', gap: '2rem', marginTop: '1rem' }}>
+      <div className="dashboard-main-grid grid-responsive" style={{ display: 'grid', gridTemplateColumns: '1fr 340px', gap: '2rem', marginTop: '1rem' }}>
         {/* Left Column: Recent Activity */}
         <div className="dashboard-left">
           <RecentActivity events={events} isLoading={isEventsLoading} />

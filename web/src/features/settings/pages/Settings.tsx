@@ -34,16 +34,19 @@ export function Settings() {
     };
 
     return (
-        <div style={{ 
-            display: "flex", 
-            gap: "2.5rem", 
-            padding: "1rem",
-            maxWidth: "1100px",
-            margin: "0 auto",
-            minHeight: "calc(100vh - 8rem)"
-        }}>
+        <div 
+            className="flex-responsive"
+            style={{ 
+                display: "flex", 
+                gap: "var(--spacing-main-x)", 
+                padding: "var(--spacing-main-y) var(--spacing-main-x)",
+                maxWidth: "1100px",
+                margin: "0 auto",
+                minHeight: "calc(100vh - 8rem)"
+            }}
+        >
             {/* Settings Navigation */}
-            <aside style={{ width: "260px", flexShrink: 0 }}>
+            <aside style={{ width: "100%", maxWidth: "260px", flexShrink: 0 }}>
                 <h2 style={{ fontSize: "1.5rem", fontWeight: 800, color: "var(--color-text-main)", marginBottom: "2rem", paddingLeft: "0.5rem" }}>
                     Settings
                 </h2>
@@ -96,7 +99,7 @@ export function Settings() {
                 <div style={{
                     background: "var(--color-white)",
                     borderRadius: "var(--radius-2xl)",
-                    padding: "2.5rem",
+                    padding: "var(--spacing-main-y)",
                     minHeight: "500px",
                     border: "1px solid var(--color-border)",
                     boxShadow: "var(--shadow-sm)"

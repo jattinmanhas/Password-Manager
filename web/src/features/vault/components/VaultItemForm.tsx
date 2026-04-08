@@ -151,7 +151,7 @@ export function VaultItemForm({
       )}
 
       <form className="form-stack" onSubmit={itemForm.handleSubmit(onSubmit)}>
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "1rem" }}>
+        <div className="grid-responsive" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "1rem" }}>
           <div className="form-group">
             <Label>Item Type</Label>
             <Controller
@@ -341,7 +341,7 @@ export function VaultItemForm({
 
         {watchKind === "card" && (
           <>
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "1rem" }}>
+            <div className="grid-responsive" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "1rem" }}>
               <div className="form-group">
                 <Label htmlFor="card-number">Card Number</Label>
                 <Controller
@@ -384,7 +384,7 @@ export function VaultItemForm({
                 />
               </div>
             </div>
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 1.5fr", gap: "1rem" }}>
+            <div className="grid-responsive" style={{ display: "grid", gridTemplateColumns: "1fr 1.5fr", gap: "1rem" }}>
               <div className="form-group">
                 <Label htmlFor="card-expiry">Expiry</Label>
                 <Controller
@@ -434,7 +434,7 @@ export function VaultItemForm({
                 disabled={saving}
               />
             </div>
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "1rem" }}>
+            <div className="grid-responsive" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "1rem" }}>
               <div className="form-group">
                 <Label htmlFor="bank-acc">Account Number</Label>
                 <Input
@@ -477,19 +477,19 @@ export function VaultItemForm({
           />
         </div>
 
-        <div style={{ display: "flex", gap: "0.75rem" }}>
+        <div className="flex-responsive" style={{ display: "flex", gap: "0.75rem" }}>
           <Button
             type="button"
             variant="ghost"
             onClick={onClose}
-            style={{ width: "auto", paddingLeft: "1.25rem", paddingRight: "1.25rem" }}
+            style={{ flex: 1, paddingLeft: "1.25rem", paddingRight: "1.25rem" }}
           >
             Cancel
           </Button>
           <Button
             type="submit"
             isLoading={saving}
-            style={{ width: "auto", paddingLeft: "1.5rem", paddingRight: "1.5rem" }}
+            style={{ flex: 1, paddingLeft: "1.5rem", paddingRight: "1.5rem" }}
           >
             {isEditing ? "Update Item" : "Save Item"}
           </Button>

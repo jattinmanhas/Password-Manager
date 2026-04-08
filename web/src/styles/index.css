@@ -27,7 +27,19 @@
   --radius-xl: 0.75rem;
   --radius-2xl: 1rem;
   --color-bg-gradient: none;
+
+  /* Responsive Spacing */
+  --spacing-main-x: 2rem;
+  --spacing-main-y: 2rem;
 }
+
+@media (max-width: 768px) {
+  :root {
+    --spacing-main-x: 1rem;
+    --spacing-main-y: 1.5rem;
+  }
+}
+
 
 .dark {
   /* 🎯 Neutral Backgrounds (Zinc/Neutral) */
@@ -523,5 +535,36 @@ ul {
 @keyframes pulse {
   0%, 100% { opacity: 1; }
   50% { opacity: 0.4; }
+}
+
+/* 📱 Responsive Utilities */
+@media (max-width: 768px) {
+  .grid-responsive {
+    grid-template-columns: 1fr !important;
+  }
+  
+  .flex-responsive {
+    flex-direction: column !important;
+    align-items: stretch !important;
+    gap: 1rem !important;
+  }
+
+  .mobile-stack {
+    flex-direction: column !important;
+    align-items: flex-start !important;
+  }
+
+  .mobile-hide {
+    display: none !important;
+  }
+
+  .mobile-full-width {
+    width: 100% !important;
+  }
+
+  /* Specific Overrides */
+  .card {
+    padding: 1.25rem !important;
+  }
 }
 

@@ -307,7 +307,7 @@ export function DashboardLayout() {
                     </div>
                 </div>
 
-                <main style={{ flex: 1, padding: "2rem", overflowY: "auto" }}>
+                <main style={{ flex: 1, padding: "var(--spacing-main-y) var(--spacing-main-x)", overflowY: "auto" }}>
                     <Outlet />
                 </main>
             </div>

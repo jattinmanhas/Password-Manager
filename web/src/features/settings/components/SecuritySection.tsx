@@ -131,7 +131,7 @@ function TwoFactorCard() {
                     <h4 style={{ margin: 0 }}>Setup Complete!</h4>
                 </div>
                 <p style={cardDescStyle}>Save these recovery codes. They are your only way back if you lose your device.</p>
-                <div style={{ 
+                <div className="grid-responsive" style={{ 
                     display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0.5rem", 
                     padding: "1rem", background: "var(--color-soft-gray)", borderRadius: "var(--radius-lg)",
                     fontFamily: "monospace", fontSize: "0.875rem", textAlign: "center", marginBottom: "1rem"

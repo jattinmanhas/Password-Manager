@@ -112,12 +112,12 @@ export function PasswordGenerator({ onUsePassword, onCancel, standalone = false 
                 )}
             </div>
             
-            <div className="pwd-gen-btns">
+            <div className="pwd-gen-btns flex-responsive">
                {standalone && (
                   <Button 
                     variant="outline" 
                     onClick={handleGenerate}
-                    style={{ flex: 1, height: "3.5rem", fontSize: "1rem", gap: "0.5rem" }}
+                    style={{ flex: 1, minHeight: "3.5rem", fontSize: "1rem", gap: "0.5rem" }}
                   >
                     <RefreshCw size={18} /> Regenerate
                   </Button>
@@ -125,7 +125,7 @@ export function PasswordGenerator({ onUsePassword, onCancel, standalone = false 
                <Button 
                   className={cn("flex-1", !standalone && "hidden")}
                   onClick={handleCopy}
-                  style={{ height: "3.5rem", fontSize: "1rem", gap: "0.5rem" }}
+                  style={{ flex: 1, minHeight: "3.5rem", fontSize: "1rem", gap: "0.5rem" }}
                >
                   {copied ? (
                     <><Check size={20} /> Copied</>
@@ -137,7 +137,7 @@ export function PasswordGenerator({ onUsePassword, onCancel, standalone = false 
                   <Button 
                     variant="outline" 
                     onClick={handleCopy}
-                    style={{ height: "3.5rem", padding: "0 1rem", flexShrink: 0 }}
+                    style={{ flex: 1, minHeight: "3.5rem", padding: "0 1rem", flexShrink: 0 }}
                   >
                     {copied ? <Check size={20} className="text-green" /> : <Copy size={20} />}
                   </Button>

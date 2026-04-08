@@ -74,6 +74,7 @@ export function VaultItemRow({ item, isTrashView, onView, onEdit, onDelete, onRe
 
   return (
     <div
+      className="mobile-stack"
       style={{
         display: "flex",
         alignItems: "center",
@@ -170,7 +171,7 @@ export function VaultItemRow({ item, isTrashView, onView, onEdit, onDelete, onRe
       </div>
 
       {/* Actions */}
-      <div style={{ display: "flex", alignItems: "center", gap: "0.25rem", flexShrink: 0 }}>
+      <div className="mobile-full-width" style={{ display: "flex", alignItems: "center", gap: "0.25rem", flexShrink: 0, justifyContent: "flex-end" }}>
         <Tooltip content="View">
           <button
             type="button"
@@ -348,7 +349,7 @@ export function VaultItemsList({
         background: "var(--color-white)",
         border: "1px solid var(--color-border)",
         borderRadius: "var(--radius-2xl)",
-        padding: "1.75rem",
+        padding: "var(--spacing-main-y) var(--spacing-main-x)",
         boxShadow: "var(--shadow-sm)",
       }}
     >
