@@ -3,8 +3,8 @@
  * All functions are stateless and side-effect free.
  */
 
-import { fromBase64, randomBytes, toBase64, utf8ToBytes } from "../../crypto";
-import type { VaultItemResponse } from "./types";
+import { fromBase64, randomBytes, toBase64, utf8ToBytes } from "./crypto";
+import type { VaultItemResponse } from "./types/vault-api.types";
 import {
   DEFAULT_PERSONAL_VAULT_ID,
   DEFAULT_SECRET,
@@ -14,7 +14,7 @@ import {
   type VaultSecret,
   type VaultSecretKind,
   type VaultType,
-} from "./vault.types";
+} from "./types/vault.types";
 
 // ── Constants ────────────────────────────────────────────────────────────────
 

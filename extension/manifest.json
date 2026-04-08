@@ -1,0 +1,42 @@
+{
+  "manifest_version": 3,
+  "name": "PMV2 — Password Manager",
+  "description": "Secure password manager with zero-knowledge encryption. Access your vault and generate passwords from any tab.",
+  "version": "0.1.0",
+  "icons": {
+    "16": "icons/icon16.png",
+    "48": "icons/icon48.png",
+    "128": "icons/icon128.png"
+  },
+  "action": {
+    "default_popup": "src/popup/index.html",
+    "default_icon": {
+      "16": "icons/icon16.png",
+      "48": "icons/icon48.png"
+    },
+    "default_title": "PMV2 Password Manager"
+  },
+  "background": {
+    "service_worker": "src/background/service-worker.ts",
+    "type": "module"
+  },
+  "content_scripts": [
+    {
+      "matches": ["<all_urls>"],
+      "js": ["src/content/content-script.ts"],
+      "run_at": "document_idle"
+    }
+  ],
+  "permissions": [
+    "activeTab",
+    "storage",
+    "cookies",
+    "tabs",
+    "alarms",
+    "clipboardWrite"
+  ],
+  "host_permissions": [
+    "http://localhost:8080/*",
+    "https://*/*"
+  ]
+}

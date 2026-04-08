@@ -1,0 +1,246 @@
+/* PMV2 Extension — Theme Variables
+ * Copied from web/src/styles/index.css to ensure visual consistency.
+ */
+
+:root {
+  --color-security-blue: #2563EB;
+  --color-security-blue-hover: #1D4ED8;
+  --color-soft-green: #10B981;
+  --color-amber: #F59E0B;
+  --color-soft-gray: #F8FAFC;
+  --color-red: #EF4444;
+  --color-white: #FFFFFF;
+  --color-text-main: #0F172A;
+  --color-text-subtle: #64748B;
+  --color-text-light: #94A3B8;
+  --color-border: #E2E8F0;
+
+  --color-emerald: #10B981;
+  --color-emerald-subtle: rgba(16, 185, 129, 0.1);
+  --color-rose: #F43F5E;
+  --color-rose-subtle: rgba(244, 63, 94, 0.1);
+  --color-blue: #3B82F6;
+  --color-blue-subtle: rgba(59, 130, 246, 0.1);
+  --color-amber-subtle: rgba(245, 158, 11, 0.1);
+
+  --color-bg-base: var(--color-soft-gray);
+
+  --shadow-sm: 0 1px 2px 0 rgb(0 0 0 / 0.05);
+  --shadow-md: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
+  --radius-xl: 0.75rem;
+  --radius-2xl: 1rem;
+  --color-bg-gradient: none;
+}
+
+.dark {
+  --color-bg-main: #09090B;
+  --color-bg-surface: #18181B;
+  --color-bg-elevated: #27272A;
+
+  --color-security-blue: #3B82F6;
+  --color-security-blue-hover: #2563EB;
+
+  --color-soft-green: #10B981;
+  --color-amber: #F59E0B;
+  --color-red: #EF4444;
+
+  --color-text-main: #FAFAFA;
+  --color-text-subtle: #A1A1AA;
+  --color-text-light: #71717A;
+
+  --color-border: #27272A;
+
+  --color-emerald: #10B981;
+  --color-emerald-subtle: rgba(16, 185, 129, 0.15);
+  --color-rose: #FB7185;
+  --color-rose-subtle: rgba(251, 113, 133, 0.15);
+  --color-blue: #60A5FA;
+  --color-blue-subtle: rgba(96, 165, 250, 0.15);
+  --color-amber-subtle: rgba(245, 158, 11, 0.15);
+
+  --color-bg-base: var(--color-bg-main);
+
+  --color-soft-gray: var(--color-bg-main);
+  --color-white: var(--color-bg-surface);
+
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.5);
+  --shadow-md: 0 12px 24px -4px rgba(0, 0, 0, 0.6);
+
+  --color-bg-gradient: radial-gradient(circle at top, #242427 0%, #09090B 100%);
+}
+
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  font-family: "Inter", "Segoe UI", -apple-system, BlinkMacSystemFont, "Helvetica Neue", Arial, sans-serif;
+  background-color: var(--color-soft-gray);
+  background-image: var(--color-bg-gradient);
+  color: var(--color-text-main);
+  -webkit-font-smoothing: antialiased;
+}
+
+a {
+  text-decoration: none;
+  color: var(--color-security-blue);
+}
+
+a:hover {
+  text-decoration: underline;
+}
+
+button {
+  cursor: pointer;
+  border: none;
+  background: none;
+  font-family: inherit;
+}
+
+ul {
+  list-style: none;
+}
+
+/* ── Shared UI Primitives ─────────────────────────────────────────────────── */
+
+.card {
+  background-color: var(--color-white);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-2xl);
+  box-shadow: var(--shadow-sm);
+  padding: 1.25rem;
+  transition: box-shadow 0.2s ease;
+}
+
+.label {
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: var(--color-text-main);
+  display: block;
+}
+
+.input {
+  width: 100%;
+  height: 2.75rem;
+  padding: 0 0.75rem;
+  border-radius: var(--radius-xl);
+  border: 1px solid var(--color-border);
+  background: transparent;
+  font-size: 0.875rem;
+  color: var(--color-text-main);
+  transition: all 0.2s ease;
+  font-family: inherit;
+}
+
+.input::placeholder {
+  color: var(--color-text-light);
+}
+
+.input:focus {
+  outline: none;
+  border-color: var(--color-security-blue);
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1);
+}
+
+.input.error {
+  border-color: var(--color-red);
+}
+
+.btn {
+  width: 100%;
+  height: 2.75rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--radius-xl);
+  font-size: 0.875rem;
+  font-weight: 600;
+  transition: all 0.2s ease;
+  padding: 0 1.5rem;
+}
+
+.btn:disabled {
+  opacity: 0.5;
+  pointer-events: none;
+}
+
+.btn-primary {
+  background-color: var(--color-security-blue);
+  color: white;
+}
+
+.btn-primary:hover {
+  background-color: var(--color-security-blue-hover);
+}
+
+.btn-ghost {
+  background-color: transparent;
+  color: var(--color-text-subtle);
+}
+
+.btn-ghost:hover {
+  background-color: var(--color-border);
+  color: var(--color-text-main);
+}
+
+.btn-outline {
+  background-color: transparent;
+  color: var(--color-security-blue);
+  border: 1px solid var(--color-security-blue);
+}
+
+.btn-outline:hover {
+  background-color: var(--color-security-blue);
+  color: white;
+}
+
+.loading-spinner {
+  animation: spin 1s linear infinite;
+  margin-right: 0.5rem;
+  width: 1rem;
+  height: 1rem;
+}
+
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes slideUp {
+  from {
+    opacity: 0;
+    transform: translateY(10px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+.alert-error {
+  background-color: #FEF2F2;
+  border: 1px solid #FECACA;
+  color: #DC2626;
+  padding: 0.75rem;
+  border-radius: var(--radius-xl);
+  font-size: 0.8125rem;
+  margin-bottom: 0.75rem;
+}
+
+.dark .alert-error {
+  background-color: rgba(239, 68, 68, 0.1);
+  border-color: rgba(239, 68, 68, 0.2);
+  color: #FCA5A5;
+}
+
+.text-green { color: var(--color-soft-green); }
+.text-amber { color: var(--color-amber); }
+.text-red { color: var(--color-red); }
+.text-blue { color: var(--color-security-blue); }

@@ -12,9 +12,6 @@ import {
   type VaultCardModel,
   type VaultViewItem,
 } from "../vault.types";
-import {
-  normalizeMemberList,
-} from "../vault.utils";
 
 import { VaultUnlockScreen } from "../components/VaultUnlockScreen";
 import { VaultSidebar } from "../components/VaultSidebar";
