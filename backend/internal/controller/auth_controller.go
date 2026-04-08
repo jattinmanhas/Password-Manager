@@ -408,29 +408,44 @@ func (c *AuthController) setSessionCookie(w http.ResponseWriter, token string, e
 		maxAge = 1
 	}
 
-	http.SetCookie(w, &http.Cookie{
+	cookie := &http.Cookie{
 		Name:     c.sessionCookieName,
 		Value:    token,
 		Path:     "/",
 		HttpOnly: true,
 		Secure:   c.sessionCookieSecure,
-		SameSite: http.SameSiteLaxMode,
 		Expires:  expiresAt.UTC(),
 		MaxAge:   maxAge,
-	})
+	}
+
+	// For cross-domain cookies (Vercel -> Render), we MUST use SameSite=None + Secure.
+	if c.sessionCookieSecure {
+		cookie.SameSite = http.SameSiteNoneMode
+	} else {
+		cookie.SameSite = http.SameSiteLaxMode
+	}
+
+	http.SetCookie(w, cookie)
 }
 
 func (c *AuthController) clearSessionCookie(w http.ResponseWriter) {
-	http.SetCookie(w, &http.Cookie{
+	cookie := &http.Cookie{
 		Name:     c.sessionCookieName,
 		Value:    "",
 		Path:     "/",
 		HttpOnly: true,
 		Secure:   c.sessionCookieSecure,
-		SameSite: http.SameSiteLaxMode,
 		Expires:  time.Unix(0, 0).UTC(),
 		MaxAge:   -1,
-	})
+	}
+
+	if c.sessionCookieSecure {
+		cookie.SameSite = http.SameSiteNoneMode
+	} else {
+		cookie.SameSite = http.SameSiteLaxMode
+	}
+
+	http.SetCookie(w, cookie)
 }
 
 func (c *AuthController) HandleUpdateProfile(w http.ResponseWriter, r *http.Request, session domain.Session) {
