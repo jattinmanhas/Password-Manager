@@ -5,11 +5,26 @@ import (
 	"strings"
 )
 
-func CORS(allowedOrigin string, next http.Handler) http.Handler {
-	normalizedAllowedOrigin := strings.TrimSpace(allowedOrigin)
+func CORS(allowedOrigins string, next http.Handler) http.Handler {
+	origins := strings.Split(allowedOrigins, ",")
+	for i := range origins {
+		origins[i] = strings.TrimSpace(origins[i])
+	}
+
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		requestOrigin := strings.TrimSpace(r.Header.Get("Origin"))
-		if requestOrigin != "" && requestOrigin == normalizedAllowedOrigin {
+
+		allowed := false
+		if requestOrigin != "" {
+			for _, o := range origins {
+				if o == "*" || o == requestOrigin {
+					allowed = true
+					break
+				}
+			}
+		}
+
+		if allowed {
 			w.Header().Set("Access-Control-Allow-Origin", requestOrigin)
 			w.Header().Set("Access-Control-Allow-Credentials", "true")
 			w.Header().Add("Vary", "Origin")

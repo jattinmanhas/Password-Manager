@@ -1,0 +1,21 @@
+services:
+  # Backend API
+  - type: web
+    name: pmv2-api
+    env: docker
+    dockerContext: ./backend
+    dockerfilePath: ./backend/Dockerfile
+    plan: free # Use the free tier
+    envVars:
+      - key: APP_ENV
+        value: production
+      - key: DATABASE_URL
+        sync: false # Set this manually in the Render dashboard
+      - key: AUTH_TOKEN_PEPPER
+        generateValue: true # Generates a random string, but it's best to set it manually for persistence
+      - key: CORS_ALLOWED_ORIGINS
+        value: "https://password-manager-nu-self.vercel.app"
+      - key: APP_PORT
+        value: "8080" # Render will use this but also set PORT
+      - key: LOG_FILE_PATH
+        value: "/tmp/api.log" # Logs are ephemeral on Render disk

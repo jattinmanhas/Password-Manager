@@ -40,9 +40,12 @@ type Config struct {
 func Load() Config {
 	_ = godotenv.Load() // Ignore error, as .env might not exist in production
 
+	// Render/Heroku/Railway provide port via PORT env var.
+	port := getenv("APP_PORT", getenv("PORT", "8080"))
+
 	return Config{
 		Env:               getenv("APP_ENV", "dev"),
-		Port:              getenv("APP_PORT", "8080"),
+		Port:              port,
 		ReadTimeout:       mustDuration(getenv("APP_READ_TIMEOUT", "10s")),
 		WriteTimeout:      mustDuration(getenv("APP_WRITE_TIMEOUT", "15s")),
 		IdleTimeout:       mustDuration(getenv("APP_IDLE_TIMEOUT", "60s")),
@@ -50,7 +53,7 @@ func Load() Config {
 		SessionTTL:        mustDuration(getenv("SESSION_TTL", "720h")),
 		AuthPepper:        getenv("AUTH_TOKEN_PEPPER", "pmv2-dev-pepper-change-me"),
 		TOTPIssuer:        getenv("TOTP_ISSUER", "PMV2"),
-		FrontendOrigin:    getenv("FRONTEND_ORIGIN", "http://localhost:5173"),
+		FrontendOrigin:    getenv("CORS_ALLOWED_ORIGINS", getenv("FRONTEND_ORIGIN", "http://localhost:5173")),
 		SessionCookieName: getenv("SESSION_COOKIE_NAME", "pmv2_session"),
 
 		// KDF defaults match the crypto spec: 64MB, 3 iterations, parallelism 2.
