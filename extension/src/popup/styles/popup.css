@@ -531,3 +531,13 @@ html, body, #root {
   animation: slideUp 0.2s ease-out;
   z-index: 100;
 }
+
+/* ── Mobile Overrides (e.g. for mobile browsers like Kiwi) ────────────────── */
+
+@media (max-width: 380px) {
+  .pwdgen-output {
+    font-size: 0.8125rem !important;
+    padding: 0.625rem !important;
+    height: 3.5rem !important;
+  }
+}

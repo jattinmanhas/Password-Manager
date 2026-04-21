@@ -22,8 +22,8 @@ export const SecurityScoreGauge: React.FC<SecurityScoreGaugeProps> = ({
   };
 
   return (
-    <div className="security-gauge-wrapper" style={{ width: size, height: size, position: 'relative' }}>
-      <svg width={size} height={size} style={{ transform: 'rotate(-90deg)' }}>
+    <div className="security-gauge-wrapper" style={{ position: 'relative' }}>
+      <svg viewBox={`0 0 ${size} ${size}`} style={{ transform: 'rotate(-90deg)', display: 'block', width: '100%', height: '100%' }}>
         {/* Background Circle */}
         <circle
           cx={size / 2}
@@ -60,11 +60,12 @@ export const SecurityScoreGauge: React.FC<SecurityScoreGaugeProps> = ({
           display: 'flex',
           flexDirection: 'column',
           alignItems: 'center',
-          justifyContent: 'center'
+          justifyContent: 'center',
+          width: '100%'
         }}
       >
-        <span style={{ fontSize: '1.5rem', fontWeight: '800', color: getColor(score) }}>{score}%</span>
-        <span style={{ fontSize: '0.625rem', color: 'var(--color-text-subtle)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Health</span>
+        <span style={{ fontSize: '1.25rem', fontWeight: '800', color: getColor(score), lineHeight: 1 }}>{score}%</span>
+        <span style={{ fontSize: '0.625rem', color: 'var(--color-text-subtle)', textTransform: 'uppercase', letterSpacing: '0.05em', marginTop: '2px' }}>Health</span>
       </div>
     </div>
   );

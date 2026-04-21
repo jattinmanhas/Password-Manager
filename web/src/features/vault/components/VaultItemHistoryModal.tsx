@@ -72,20 +72,8 @@ export function VaultItemHistoryModal({
             No previous revisions yet. This item has not been updated since it was created.
           </div>
         ) : (
-          <div style={{ display: "grid", gridTemplateColumns: "260px 1fr", gap: "1rem" }}>
-            <div
-              style={{
-                border: "1px solid var(--color-border)",
-                borderRadius: "var(--radius-xl)",
-                background: "var(--color-soft-gray)",
-                padding: "0.75rem",
-                display: "flex",
-                flexDirection: "column",
-                gap: "0.5rem",
-                maxHeight: "26rem",
-                overflowY: "auto",
-              }}
-            >
+          <div className="history-modal-layout">
+            <div className="history-modal-sidebar">
               {versions.map((version) => {
                 const isSelected = version.id === selectedVersion?.id;
                 const label = version.secret?.title || "Untitled";
@@ -118,15 +106,7 @@ export function VaultItemHistoryModal({
               })}
             </div>
 
-            <div
-              style={{
-                border: "1px solid var(--color-border)",
-                borderRadius: "var(--radius-xl)",
-                padding: "1.25rem",
-                background: "var(--color-white)",
-                minHeight: "20rem",
-              }}
-            >
+            <div className="history-modal-content">
               {selectedVersion && selectedSecret ? (
                 <div style={{ display: "flex", flexDirection: "column", gap: "1rem" }}>
                   <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "1rem" }}>

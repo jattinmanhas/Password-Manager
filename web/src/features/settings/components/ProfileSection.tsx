@@ -53,7 +53,7 @@ export function ProfileSection() {
 
     return (
         <div style={{ display: "flex", flexDirection: "column", gap: "2rem" }}>
-            <div style={{ padding: "0 0.5rem" }}>
+            <div className="settings-section-header" style={{ padding: "0 0.5rem" }}>
                 <h3 style={{ fontSize: "1.25rem", fontWeight: 700, color: "var(--color-text-main)", marginBottom: "0.5rem" }}>
                     Profile
                 </h3>
@@ -62,13 +62,17 @@ export function ProfileSection() {
                 </p>
             </div>
 
-            <div style={{ 
-                display: "grid", 
-                gridTemplateColumns: "repeat(auto-fill, minmax(300px, 1fr))", 
-                gap: "1rem" 
-            }}>
+            <div 
+                className="grid-responsive"
+                style={{ 
+                    display: "grid", 
+                    gridTemplateColumns: "repeat(auto-fill, minmax(min(100%, 350px), 1fr))", 
+                    gap: "1rem" 
+                }}
+            >
                 {profileItems.map((item) => (
                     <div 
+                        className="settings-info-row"
                         key={item.id}
                         style={{
                             padding: "1.25rem",
@@ -147,15 +151,14 @@ export function ProfileSection() {
                                     </button>
                                 </div>
                             ) : (
-                                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                                <div className="settings-value-row" style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "0.75rem" }}>
                                     <p style={{ 
                                         fontSize: "0.9375rem", 
                                         fontWeight: 500, 
                                         color: "var(--color-text-main)",
                                         margin: 0,
-                                        whiteSpace: "nowrap",
-                                        overflow: "hidden",
-                                        textOverflow: "ellipsis"
+                                        whiteSpace: "normal",
+                                        overflowWrap: "anywhere"
                                     }}>
                                         {item.value}
                                     </p>

@@ -38,7 +38,7 @@ export function ChangelogSection() {
 
     return (
         <div style={{ display: "flex", flexDirection: "column", gap: "2.5rem" }}>
-            <div style={{ padding: "0 0.5rem" }}>
+            <div className="settings-section-header" style={{ padding: "0 0.5rem" }}>
                 <h3 style={{ fontSize: "1.25rem", fontWeight: 700, color: "var(--color-text-main)", marginBottom: "0.5rem" }}>
                     Changelog
                 </h3>
@@ -47,7 +47,7 @@ export function ChangelogSection() {
                 </p>
             </div>
 
-            <div style={{ display: "flex", flexDirection: "column", gap: "2rem", paddingLeft: "0.5rem" }}>
+            <div className="settings-timeline" style={{ display: "flex", flexDirection: "column", gap: "2rem", paddingLeft: "0.5rem" }}>
                 {versionHistory.map((release, index) => (
                     <div key={release.version} style={{ position: "relative" }}>
                         {index !== versionHistory.length - 1 && (
@@ -62,7 +62,7 @@ export function ChangelogSection() {
                             }} />
                         )}
 
-                        <div style={{ display: "flex", gap: "1.5rem", position: "relative", zIndex: 1 }}>
+                        <div className="settings-timeline-entry" style={{ display: "flex", gap: "1.5rem", position: "relative", zIndex: 1 }}>
                             <div style={{
                                 width: "1.25rem",
                                 height: "1.25rem",
@@ -74,7 +74,7 @@ export function ChangelogSection() {
                             }} />
                             
                             <div style={{ flex: 1 }}>
-                                <div style={{ display: "flex", alignItems: "center", gap: "0.75rem", marginBottom: "1rem" }}>
+                                <div className="settings-release-header" style={{ display: "flex", alignItems: "center", gap: "0.75rem", marginBottom: "1rem" }}>
                                     <h4 style={{ fontSize: "1.125rem", fontWeight: 700, color: "var(--color-text-main)", margin: 0 }}>
                                         v{release.version}
                                     </h4>

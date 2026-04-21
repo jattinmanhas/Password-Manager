@@ -37,7 +37,7 @@ export const DashboardStats: React.FC<DashboardStatsProps> = ({
   return (
     <div className="dashboard-stats-container" style={{ marginBottom: '2.5rem' }}>
       {/* Featured Security Health Card */}
-      <Card className="flex-responsive" style={{ 
+      <Card className="flex-responsive dashboard-health-card" style={{ 
         padding: '2rem', 
         marginBottom: '1.5rem',
         display: 'flex', 
@@ -50,33 +50,35 @@ export const DashboardStats: React.FC<DashboardStatsProps> = ({
         overflow: 'hidden',
         boxShadow: 'var(--shadow-md)'
       }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '2rem', flex: 1 }}>
-          <SecurityScoreGauge score={isLocked ? 0 : securityScore} size={110} strokeWidth={10} />
-          <div style={{ flex: 1 }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '0.25rem' }}>
+        <div className="flex-responsive dashboard-health-info" style={{ display: 'flex', alignItems: 'center', gap: '1.5rem', flex: 1, width: '100%' }}>
+          <div className="dashboard-health-gauge" style={{ flexShrink: 0, display: 'flex', justifyContent: 'center' }}>
+            <SecurityScoreGauge score={isLocked ? 0 : securityScore} size={110} strokeWidth={10} />
+          </div>
+          <div className="dashboard-health-copy" style={{ flex: 1, minWidth: 0 }}>
+            <div className="dashboard-health-label-wrap" style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '0.35rem' }}>
               <Shield size={20} color="var(--color-security-blue)" />
               <h3 style={{ fontSize: '0.875rem', fontWeight: '700', color: 'var(--color-text-subtle)', margin: 0, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
                 Overall Security Health
               </h3>
             </div>
-            <p style={{ fontSize: '1.75rem', fontWeight: '800', color: 'var(--color-text-main)', margin: '0.25rem 0' }}>
+            <p className="dashboard-health-status" style={{ fontSize: 'clamp(1.25rem, 5vw, 1.75rem)', fontWeight: '800', color: 'var(--color-text-main)', margin: '0.25rem 0', lineHeight: 1.2 }}>
               {isLocked ? 'Vault Encrypted' : (securityScore >= 80 ? 'Excellent Protection' : securityScore >= 50 ? 'Fair Security' : 'Security Risk Detected')}
             </p>
-            <p style={{ fontSize: '0.875rem', color: 'var(--color-text-subtle)', margin: 0, maxWidth: '500px' }}>
+            <p className="dashboard-health-desc" style={{ fontSize: '0.875rem', color: 'var(--color-text-subtle)', margin: 0 }}>
               {isLocked 
-                ? 'Your vault is currently locked. Unlock with your master password to view detailed security metrics and health scores.' 
+                ? 'Your vault is currently locked. Unlock to view security metrics.' 
                 : (securityScore >= 80 
-                    ? 'Your score reflects account setup, password hygiene, sharing exposure, sensitive-data storage, and vault integrity.'
-                    : 'This score now blends account posture, password hygiene, sharing exposure, sensitive-data storage, and vault integrity.')}
+                    ? 'Your score reflects password hygiene, sharing exposure, and vault integrity.'
+                    : 'This score covers account posture, password hygiene, and vault integrity.')}
             </p>
           </div>
         </div>
 
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem', minWidth: '240px', maxWidth: '260px' }}>
+        <div className="dashboard-health-actions" style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem', width: '100%', maxWidth: '260px' }}>
           {!isLocked ? (
             <>
               <div style={{ padding: '0.75rem', borderRadius: '10px', backgroundColor: 'var(--color-emerald-subtle)', border: '1px solid rgba(0,0,0,0.05)' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.625rem' }}>
+                <div className="dashboard-health-action-status" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.625rem' }}>
                   <LockOpen size={14} color="var(--color-soft-green)" />
                   <span style={{ fontSize: '0.6875rem', fontWeight: 800, letterSpacing: '0.08em', color: 'var(--color-soft-green)', textTransform: 'uppercase', whiteSpace: 'nowrap' }}>
                     Unlocked
@@ -92,29 +94,29 @@ export const DashboardStats: React.FC<DashboardStatsProps> = ({
                   Lock Vault
                 </Button>
               </div>
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: '0.5rem' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '0.45rem', padding: '0.625rem 0.75rem', borderRadius: '10px', backgroundColor: weakPasswords > 0 ? 'var(--color-rose-subtle)' : 'var(--color-emerald-subtle)', border: '1px solid rgba(0,0,0,0.05)' }}>
+              <div className="dashboard-mini-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: '0.5rem' }}>
+                <div className="dashboard-mini-metric-item" style={{ display: 'flex', alignItems: 'center', gap: '0.45rem', padding: '0.625rem 0.75rem', borderRadius: '10px', backgroundColor: weakPasswords > 0 ? 'var(--color-rose-subtle)' : 'var(--color-emerald-subtle)', border: '1px solid rgba(0,0,0,0.05)' }}>
                   <ShieldAlert size={14} color={weakPasswords > 0 ? 'var(--color-rose)' : 'var(--color-soft-green)'} />
-                  <span style={{ fontSize: '0.75rem', fontWeight: '600', color: 'var(--color-text-main)' }}>
-                    {weakPasswords} Weak
+                  <span className="dashboard-mini-metric-label">
+                    {weakPasswords} <span className="mobile-hide">Weak</span><span className="mobile-show">W</span>
                   </span>
                 </div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '0.45rem', padding: '0.625rem 0.75rem', borderRadius: '10px', backgroundColor: reusedPasswords > 0 ? 'var(--color-amber-subtle)' : 'var(--color-emerald-subtle)', border: '1px solid rgba(0,0,0,0.05)' }}>
+                <div className="dashboard-mini-metric-item" style={{ display: 'flex', alignItems: 'center', gap: '0.45rem', padding: '0.625rem 0.75rem', borderRadius: '10px', backgroundColor: reusedPasswords > 0 ? 'var(--color-amber-subtle)' : 'var(--color-emerald-subtle)', border: '1px solid rgba(0,0,0,0.05)' }}>
                   <Shield size={14} color={reusedPasswords > 0 ? 'var(--color-amber)' : 'var(--color-soft-green)'} />
-                  <span style={{ fontSize: '0.75rem', fontWeight: '600', color: 'var(--color-text-main)' }}>
-                    {reusedPasswords} Reused
+                  <span className="dashboard-mini-metric-label">
+                    {reusedPasswords} <span className="mobile-hide">Reused</span><span className="mobile-show">R</span>
                   </span>
                 </div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '0.45rem', padding: '0.625rem 0.75rem', borderRadius: '10px', backgroundColor: corruptedItems > 0 ? 'var(--color-rose-subtle)' : 'var(--color-emerald-subtle)', border: '1px solid rgba(0,0,0,0.05)' }}>
+                <div className="dashboard-mini-metric-item" style={{ display: 'flex', alignItems: 'center', gap: '0.45rem', padding: '0.625rem 0.75rem', borderRadius: '10px', backgroundColor: corruptedItems > 0 ? 'var(--color-rose-subtle)' : 'var(--color-emerald-subtle)', border: '1px solid rgba(0,0,0,0.05)' }}>
                   <AlertTriangle size={14} color={corruptedItems > 0 ? 'var(--color-rose)' : 'var(--color-soft-green)'} />
-                  <span style={{ fontSize: '0.75rem', fontWeight: '600', color: 'var(--color-text-main)' }}>
-                    {corruptedItems} Corrupt
+                  <span className="dashboard-mini-metric-label">
+                    {corruptedItems} <span className="mobile-hide">Corrupt</span><span className="mobile-show">C</span>
                   </span>
                 </div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '0.45rem', padding: '0.625rem 0.75rem', borderRadius: '10px', backgroundColor: sharedItems > 0 ? 'var(--color-amber-subtle)' : 'var(--color-emerald-subtle)', border: '1px solid rgba(0,0,0,0.05)' }}>
+                <div className="dashboard-mini-metric-item" style={{ display: 'flex', alignItems: 'center', gap: '0.45rem', padding: '0.625rem 0.75rem', borderRadius: '10px', backgroundColor: sharedItems > 0 ? 'var(--color-amber-subtle)' : 'var(--color-emerald-subtle)', border: '1px solid rgba(0,0,0,0.05)' }}>
                   <Share2 size={14} color={sharedItems > 0 ? 'var(--color-amber)' : 'var(--color-soft-green)'} />
-                  <span style={{ fontSize: '0.75rem', fontWeight: '600', color: 'var(--color-text-main)' }}>
-                    {sharedItems} Shared
+                  <span className="dashboard-mini-metric-label">
+                    {sharedItems} <span className="mobile-hide">Shared</span><span className="mobile-show">S</span>
                   </span>
                 </div>
               </div>
@@ -152,63 +154,48 @@ export const DashboardStats: React.FC<DashboardStatsProps> = ({
         gap: '1.25rem'
       }}>
         {/* Total Items Card */}
-        <Card style={{ padding: '1.5rem', position: 'relative' }}>
+        <Card className="dashboard-metric-card" style={{ padding: '1.5rem', position: 'relative' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
             <div>
-              <h3 style={{ fontSize: '0.8125rem', fontWeight: '600', color: 'var(--color-text-subtle)', marginBottom: '0.5rem' }}>Vault Items</h3>
-              <p style={{ fontSize: '2.25rem', fontWeight: '800', color: 'var(--color-security-blue)', lineHeight: '1' }}>
+              <h3 className="dashboard-metric-title">Vault Items</h3>
+              <p className="dashboard-metric-value dashboard-metric-value--blue">
                 {isLocked ? '---' : totalItems}
               </p>
-              <p style={{ fontSize: '0.75rem', color: 'var(--color-text-light)', marginTop: '0.5rem' }}>
-                {isLocked ? 'Vault is locked' : 'Total secrets encrypted'}
+              <p className="dashboard-metric-desc">
+                {isLocked ? 'Vault is locked' : 'Secrets encrypted'}
               </p>
             </div>
-            <div style={{ 
-              width: '40px', height: '40px', borderRadius: '12px', 
-              backgroundColor: 'var(--color-blue-subtle)', color: 'var(--color-security-blue)',
-              display: 'flex', alignItems: 'center', justifyContent: 'center'
-            }}>
+            <div className="dashboard-metric-icon dashboard-metric-icon--blue">
               <Key size={20} />
             </div>
           </div>
         </Card>
 
         {/* Activity Stats Card */}
-        <Card style={{ padding: '1.5rem', position: 'relative' }}>
+        <Card className="dashboard-metric-card" style={{ padding: '1.5rem', position: 'relative' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
             <div>
-              <h3 style={{ fontSize: '0.875rem', fontWeight: '600', color: 'var(--color-text-subtle)', marginBottom: '0.5rem' }}>Activity (24h)</h3>
-              <p style={{ fontSize: '2.5rem', fontWeight: '800', color: 'var(--color-soft-green)', lineHeight: '1' }}>{recentActivityCount}</p>
-              <p style={{ fontSize: '0.75rem', color: 'var(--color-text-light)', marginTop: '0.5rem' }}>Security events recorded</p>
+              <h3 className="dashboard-metric-title">Activity (24h)</h3>
+              <p className="dashboard-metric-value dashboard-metric-value--green">{recentActivityCount}</p>
+              <p className="dashboard-metric-desc mobile-hide">Security events recorded</p>
             </div>
-            <div style={{ 
-              width: '40px', height: '40px', borderRadius: '12px', 
-              backgroundColor: 'var(--color-emerald-subtle)', color: 'var(--color-soft-green)',
-              display: 'flex', alignItems: 'center', justifyContent: 'center'
-            }}>
+            <div className="dashboard-metric-icon dashboard-metric-icon--green">
               <Clock size={20} />
             </div>
           </div>
         </Card>
         
         {/* Sharing Exposure Card */}
-        <Card style={{ padding: '1.5rem', position: 'relative' }}>
+        <Card className="dashboard-metric-card" style={{ padding: '1.5rem', position: 'relative' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
             <div>
-              <h3 style={{ fontSize: '0.8125rem', fontWeight: '600', color: 'var(--color-text-subtle)', marginBottom: '0.5rem' }}>Shared Exposure</h3>
-              <p style={{ fontSize: '2.25rem', fontWeight: '800', color: !isLocked && sharedItems > 0 ? 'var(--color-amber)' : 'var(--color-soft-green)', lineHeight: '1' }}>
+              <h3 className="dashboard-metric-title">Exposure</h3>
+              <p className="dashboard-metric-value dashboard-metric-value--amber">
                 {isLocked ? '---' : sharedItems}
               </p>
-              <p style={{ fontSize: '0.75rem', color: 'var(--color-text-light)', marginTop: '0.5rem' }}>
-                {isLocked ? 'Encryption active' : 'Your secrets currently shared with others'}
-              </p>
+              <p className="dashboard-metric-desc mobile-hide">Shared secrets</p>
             </div>
-            <div style={{ 
-              width: '40px', height: '40px', borderRadius: '12px', 
-              backgroundColor: sharedItems > 0 ? 'var(--color-amber-subtle)' : 'var(--color-emerald-subtle)', 
-              color: sharedItems > 0 ? 'var(--color-amber)' : 'var(--color-soft-green)',
-              display: 'flex', alignItems: 'center', justifyContent: 'center'
-            }}>
+            <div className="dashboard-metric-icon dashboard-metric-icon--amber">
               <Share2 size={20} />
             </div>
           </div>
@@ -217,14 +204,14 @@ export const DashboardStats: React.FC<DashboardStatsProps> = ({
       </div>
 
       {!isLocked && (
-        <Card style={{ padding: '1.25rem 1.5rem', marginTop: '1.25rem' }}>
+        <Card className="dashboard-breakdown-card" style={{ marginTop: '1.25rem' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '1rem' }}>
             <Shield size={18} color="var(--color-security-blue)" />
             <h3 style={{ fontSize: '0.875rem', fontWeight: '700', color: 'var(--color-text-main)', margin: 0 }}>
               Security Health Breakdown
             </h3>
           </div>
-          <div className="grid-responsive" style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: '0.75rem' }}>
+          <div className="grid-breakdown" style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: '0.75rem' }}>
             {[
               { label: 'Account', value: breakdown.accountScore },
               { label: 'Passwords', value: breakdown.passwordScore },
@@ -232,9 +219,9 @@ export const DashboardStats: React.FC<DashboardStatsProps> = ({
               { label: 'Sensitive Data', value: breakdown.sensitiveDataScore },
               { label: 'Integrity', value: breakdown.integrityScore },
             ].map((metric) => (
-              <div key={metric.label} style={{ padding: '0.875rem', borderRadius: '12px', background: 'var(--color-bg-base)', border: '1px solid var(--color-border)' }}>
-                <div style={{ fontSize: '0.75rem', color: 'var(--color-text-subtle)', marginBottom: '0.35rem' }}>{metric.label}</div>
-                <div style={{ fontSize: '1.25rem', fontWeight: '800', color: metric.value >= 80 ? 'var(--color-soft-green)' : metric.value >= 50 ? 'var(--color-amber)' : 'var(--color-rose)' }}>
+              <div key={metric.label} className="grid-breakdown-item" style={{ background: 'var(--color-bg-base)', border: '1px solid var(--color-border)' }}>
+                <div className="grid-breakdown-label">{metric.label}</div>
+                <div className="grid-breakdown-value" style={{ color: metric.value >= 80 ? 'var(--color-soft-green)' : metric.value >= 50 ? 'var(--color-amber)' : 'var(--color-rose)' }}>
                   {metric.value}%
                 </div>
               </div>

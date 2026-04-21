@@ -100,7 +100,14 @@ export function DashboardLayout() {
     };
 
     return (
-        <div style={{ display: "flex", minHeight: "100vh", backgroundColor: "var(--color-soft-gray)" }}>
+        <div style={{ 
+            display: "flex", 
+            height: "100dvh", 
+            width: "100%",
+            backgroundColor: "var(--color-bg-base)",
+            overflow: "hidden",
+            position: "relative"
+        }}>
             
             {/* Mobile Header */}
             <header className="mobile-header" style={{
@@ -274,13 +281,16 @@ export function DashboardLayout() {
             }}>
                 {/* Mobile Top Bar */}
                 <div style={{
-                    display: typeof window !== 'undefined' && window.innerWidth >= 768 ? 'none' : 'flex',
+                    display: isMobile ? 'flex' : 'none',
                     alignItems: "center",
                     justifyContent: "space-between",
-                    padding: "1rem",
+                    padding: "0.75rem 1rem",
+                    height: "3.5rem",
+                    flexShrink: 0,
                     backgroundColor: "var(--color-white)",
                     borderBottom: "1px solid var(--color-border)",
-                    boxShadow: "0 1px 2px rgba(0,0,0,0.05)"
+                    boxShadow: "0 1px 2px rgba(0,0,0,0.05)",
+                    zIndex: 20
                 }}>
                     <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", fontWeight: "bold", fontSize: "1.125rem", color: "var(--color-text-main)" }}>
                         <ShieldCheck size={20} className="text-blue" />
@@ -307,8 +317,24 @@ export function DashboardLayout() {
                     </div>
                 </div>
 
-                <main style={{ flex: 1, padding: "var(--spacing-main-y) var(--spacing-main-x)", overflowY: "auto" }}>
-                    <Outlet />
+                <main style={{ 
+                    flex: 1, 
+                    padding: isMobile ? "0.75rem" : "var(--spacing-main-y) var(--spacing-main-x)", 
+                    overflowY: "auto",
+                    overflowX: "hidden",
+                    WebkitOverflowScrolling: "touch",
+                    position: "relative",
+                    minHeight: 0,
+                    minWidth: 0
+                }}>
+                    <div style={{ 
+                        maxWidth: "1200px", 
+                        margin: "0 auto", 
+                        width: "100%",
+                        height: "100%"
+                    }}>
+                        <Outlet />
+                    </div>
                 </main>
             </div>
         </div>

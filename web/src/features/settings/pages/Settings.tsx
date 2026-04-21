@@ -35,56 +35,49 @@ export function Settings() {
 
     return (
         <div 
-            className="flex-responsive"
-            style={{ 
-                display: "flex", 
-                gap: "var(--spacing-main-x)", 
-                padding: "var(--spacing-main-y) var(--spacing-main-x)",
-                maxWidth: "1100px",
-                margin: "0 auto",
-                minHeight: "calc(100vh - 8rem)"
-            }}
+            className="settings-page"
         >
-            {/* Settings Navigation */}
-            <aside style={{ width: "100%", maxWidth: "260px", flexShrink: 0 }}>
+            <div className="settings-mobile-title">
+                <h1>Settings</h1>
+                <p>Fine-tune security, appearance, and account preferences.</p>
+            </div>
+
+            {/* Mobile Tab Navigation */}
+            <div className="settings-mobile-tabs">
+                {tabs.map((tab) => (
+                    <button
+                        key={tab.id}
+                        onClick={() => setActiveTab(tab.id)}
+                        className="settings-mobile-tab-btn"
+                        style={{
+                            background: activeTab === tab.id ? "var(--color-security-blue)" : "var(--color-bg-base)",
+                            color: activeTab === tab.id ? "white" : "var(--color-text-subtle)",
+                            borderColor: activeTab === tab.id ? "var(--color-security-blue)" : "var(--color-border)",
+                        }}
+                    >
+                        <tab.icon size={16} />
+                        {tab.label}
+                    </button>
+                ))}
+            </div>
+
+            {/* Desktop Settings Navigation */}
+            <aside className="settings-sidebar">
                 <h2 style={{ fontSize: "1.5rem", fontWeight: 800, color: "var(--color-text-main)", marginBottom: "2rem", paddingLeft: "0.5rem" }}>
                     Settings
                 </h2>
-                <nav style={{ display: "flex", flexDirection: "column", gap: "0.5rem" }}>
+                <nav className="settings-sidebar-nav">
                     {tabs.map((tab) => (
                         <button
                             key={tab.id}
                             onClick={() => setActiveTab(tab.id)}
-                            style={{
-                                display: "flex",
-                                alignItems: "center",
-                                gap: "0.875rem",
-                                padding: "0.875rem 1rem",
-                                borderRadius: "var(--radius-xl)",
-                                background: activeTab === tab.id ? "var(--color-bg-surface, var(--color-white))" : "transparent",
-                                border: "1px solid",
-                                borderColor: activeTab === tab.id ? "var(--color-border)" : "transparent",
-                                boxShadow: activeTab === tab.id ? "var(--shadow-sm)" : "none",
-                                textAlign: "left",
-                                transition: "all 0.2s ease",
-                                cursor: "pointer",
-                                width: "100%",
-                                color: activeTab === tab.id ? "var(--color-security-blue)" : "var(--color-text-subtle)",
-                            }}
+                            className="settings-sidebar-tab"
+                            data-active={activeTab === tab.id}
                         >
-                            <div style={{
-                                width: "2rem",
-                                height: "2rem",
-                                borderRadius: "var(--radius-lg, 0.75rem)",
-                                background: activeTab === tab.id ? "rgba(37, 99, 235, 0.1)" : "var(--color-soft-gray)",
-                                display: "flex",
-                                alignItems: "center",
-                                justifyContent: "center",
-                                transition: "all 0.2s ease"
-                            }}>
+                            <div className="settings-sidebar-tab-icon">
                                 <tab.icon size={18} />
                             </div>
-                            <div style={{ flex: 1 }}>
+                            <div className="settings-sidebar-tab-copy">
                                 <div style={{ fontSize: "0.9375rem", fontWeight: 600 }}>{tab.label}</div>
                                 <div style={{ fontSize: "0.75rem", color: "var(--color-text-light)", marginTop: "0.1rem" }}>{tab.description}</div>
                             </div>
@@ -95,25 +88,11 @@ export function Settings() {
             </aside>
 
             {/* Content Area */}
-            <main style={{ flex: 1, minWidth: 0, animation: "fadeIn 0.3s ease-out" }}>
-                <div style={{
-                    background: "var(--color-white)",
-                    borderRadius: "var(--radius-2xl)",
-                    padding: "var(--spacing-main-y)",
-                    minHeight: "500px",
-                    border: "1px solid var(--color-border)",
-                    boxShadow: "var(--shadow-sm)"
-                }}>
+            <main className="settings-content-shell" style={{ animation: "fadeIn 0.3s ease-out" }}>
+                <div className="settings-content-card">
                     {renderContent()}
                 </div>
             </main>
-
-            <style dangerouslySetInnerHTML={{ __html: `
-                @keyframes fadeIn {
-                    from { opacity: 0; transform: translateY(4px); }
-                    to { opacity: 1; transform: translateY(0); }
-                }
-            ` }} />
         </div>
     );
 }
@@ -153,8 +132,8 @@ function AboutSection({ onNavigate }: { onNavigate: (tab: "changelog") => void }
                     </div>
                 </div>
 
-                <div style={{ borderTop: "1px solid var(--color-border)", paddingTop: "1.5rem" }}>
-                    <p style={{ fontSize: "0.75rem", color: "var(--color-text-light)", textAlign: "center", lineHeight: 1.6 }}>
+                <div className="flex-responsive" style={{ borderTop: "1px solid var(--color-border)", paddingTop: "1.5rem" }}>
+                    <p style={{ fontSize: "0.75rem", color: "var(--color-text-light)", textAlign: "center", lineHeight: 1.6, margin: 0 }}>
                         © 2026 Family Vault. <br />
                     </p>
                 </div>
@@ -162,4 +141,3 @@ function AboutSection({ onNavigate }: { onNavigate: (tab: "changelog") => void }
         </div>
     );
 }
-

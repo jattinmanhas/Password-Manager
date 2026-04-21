@@ -102,16 +102,16 @@ export function Dashboard() {
   const handleLockVault = () => lockVault();
 
   return (
-    <div className="dashboard-page" style={{ maxWidth: '1200px', margin: '0 auto', padding: '1rem' }}>
+    <div className="dashboard-page dashboard-page-mobile" style={{ maxWidth: '1200px', margin: '0 auto', padding: '1rem', width: '100%', minWidth: 0 }}>
       {/* Header Section */}
       <div className="dashboard-header" style={{ marginBottom: '2.5rem' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '0.5rem' }}>
           <LayoutDashboard size={24} color="var(--color-security-blue)" />
-          <h1 style={{ fontSize: '1.75rem', fontWeight: '800', letterSpacing: '-0.025em', color: 'var(--color-text-main)', margin: 0 }}>
+          <h1 className="dashboard-title">
             Dashboard
           </h1>
         </div>
-        <p style={{ fontSize: '1rem', color: 'var(--color-text-subtle)' }}>
+        <p className="dashboard-greeting">
           {getGreeting()} Your vault health is currently <span style={{ fontWeight: '600', color: isLocked ? 'var(--color-text-subtle)' : (metrics.securityScore >= 80 ? 'var(--color-soft-green)' : 'var(--color-amber)') }}>
             {isLocked ? 'Locked' : `${metrics.securityScore}%`}
           </span>.

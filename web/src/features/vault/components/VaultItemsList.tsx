@@ -1,6 +1,7 @@
 import { CreditCard, Landmark, Lock, StickyNote, Share2, Eye, Pencil, Trash2, RotateCcw, History } from "lucide-react";
-import { Tooltip } from "../../../components/ui/Tooltip";
 import type { VaultViewItem } from "../vault.types";
+
+// ── VaultItemRow ──────────────────────────────────────────────────────────────
 
 interface VaultItemRowProps {
   item: VaultViewItem;
@@ -13,20 +14,19 @@ interface VaultItemRowProps {
   onShare?: () => void;
 }
 
-export function VaultItemRow({ item, isTrashView, onView, onEdit, onDelete, onRestore, onHistory, onShare }: VaultItemRowProps) {
+export function VaultItemRow({
+  item,
+  isTrashView,
+  onView,
+  onEdit,
+  onDelete,
+  onRestore,
+  onHistory,
+  onShare,
+}: VaultItemRowProps) {
   if (item.isCorrupted || !item.secret) {
     return (
-      <div
-        style={{
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "space-between",
-          padding: "1rem",
-          borderRadius: "var(--radius-xl)",
-          border: "1px solid #FECACA",
-          background: "#FEF2F2",
-        }}
-      >
+      <div className="vault-corrupted-row">
         <span style={{ fontSize: "0.875rem", fontWeight: 600, color: "#DC2626" }}>
           ⚠ Unable to decrypt this item
         </span>
@@ -52,7 +52,6 @@ export function VaultItemRow({ item, isTrashView, onView, onEdit, onDelete, onRe
 
   const { secret } = item;
   const kind = secret.kind || "login";
-  const initials = (secret.title || "?").slice(0, 1).toUpperCase();
   const hue = [...(secret.title || "A")].reduce((acc, ch) => acc + ch.charCodeAt(0), 0) % 360;
 
   let Icon = Lock;
@@ -73,96 +72,40 @@ export function VaultItemRow({ item, isTrashView, onView, onEdit, onDelete, onRe
   }
 
   return (
-    <div
-      className="mobile-stack"
-      style={{
-        display: "flex",
-        alignItems: "center",
-        gap: "1rem",
-        padding: "0.875rem 1rem",
-        borderRadius: "var(--radius-xl)",
-        border: "1px solid var(--color-border)",
-        background: "var(--color-soft-gray)",
-        transition: "border-color 0.15s ease",
-      }}
-    >
-      {/* Site icon */}
+    <div className="vault-item-row">
+      {/* Icon */}
       <div
-        style={{
-          width: "2.25rem",
-          height: "2.25rem",
-          borderRadius: "var(--radius-xl)",
-          background: `hsl(${hue}, 55%, 50%)`,
-          color: "white",
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "center",
-          flexShrink: 0,
-        }}
+        className="vault-item-row-icon"
+        style={{ background: `hsl(${hue}, 55%, 50%)` }}
       >
-        <Icon size={18} />
+        <Icon size={16} />
       </div>
 
       {/* Content */}
-      <div style={{ flex: 1, minWidth: 0 }}>
-        <p
-          style={{
-            fontWeight: 600,
-            fontSize: "0.9375rem",
-            color: "var(--color-text-main)",
-            whiteSpace: "nowrap",
-            overflow: "hidden",
-            textOverflow: "ellipsis",
-            margin: 0,
-          }}
-        >
+      <div className="vault-item-row-content">
+        <p className="vault-item-row-title">
           {secret.title || "Untitled"}
           {item.isShared && (
-            <span title="This item is shared" style={{ marginLeft: "0.5rem", display: "inline-flex", alignItems: "center" }}>
-              <Share2 
-                size={12} 
-                style={{ 
-                  color: "var(--color-security-blue)",
-                }} 
-              />
+            <span
+              title="This item is shared"
+              style={{
+                marginLeft: "0.375rem",
+                display: "inline-flex",
+                alignItems: "center",
+                verticalAlign: "middle",
+              }}
+            >
+              <Share2 size={11} style={{ color: "var(--color-security-blue)" }} />
             </span>
           )}
         </p>
-        <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", marginTop: "0.1rem" }}>
-          {subtitle && (
-            <p
-              style={{
-                fontSize: "0.8125rem",
-                color: "var(--color-text-subtle)",
-                whiteSpace: "nowrap",
-                overflow: "hidden",
-                textOverflow: "ellipsis",
-                margin: 0,
-              }}
-            >
-              {subtitle}
-            </p>
-          )}
-        </div>
-        
-        {/* Tags */}
+        {subtitle && (
+          <p className="vault-item-row-subtitle">{subtitle}</p>
+        )}
         {secret.tags && secret.tags.length > 0 && (
-          <div style={{ display: "flex", flexWrap: "wrap", gap: "0.25rem", marginTop: "0.375rem" }}>
+          <div className="vault-item-row-tags">
             {secret.tags.map((tag) => (
-              <span
-                key={tag}
-                style={{
-                  fontSize: "0.625rem",
-                  fontWeight: 600,
-                  textTransform: "uppercase",
-                  letterSpacing: "0.02em",
-                  padding: "0.125rem 0.5rem",
-                  borderRadius: "0.25rem",
-                  background: "var(--color-bg-light)",
-                  border: "1px solid var(--color-border)",
-                  color: "var(--color-text-subtle)",
-                }}
-              >
+              <span key={tag} className="vault-item-row-tag">
                 {tag}
               </span>
             ))}
@@ -171,145 +114,37 @@ export function VaultItemRow({ item, isTrashView, onView, onEdit, onDelete, onRe
       </div>
 
       {/* Actions */}
-      <div className="mobile-full-width" style={{ display: "flex", alignItems: "center", gap: "0.25rem", flexShrink: 0, justifyContent: "flex-end" }}>
-        <Tooltip content="View">
-          <button
-            type="button"
-            onClick={onView}
-            style={{
-              padding: "0.5rem",
-              borderRadius: "0.5rem",
-              color: "var(--color-security-blue)",
-              background: "transparent",
-              border: "none",
-              cursor: "pointer",
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-            }}
-            onMouseEnter={(e) => e.currentTarget.style.backgroundColor = "rgba(37,99,235,0.1)"}
-            onMouseLeave={(e) => e.currentTarget.style.backgroundColor = "transparent"}
-          >
-            <Eye size={16} />
+      <div className="vault-item-row-actions">
+        <button type="button" className="vault-action-btn view" onClick={onView} title="View">
+          <Eye size={16} />
+        </button>
+
+        {!isTrashView && (
+          <button type="button" className="vault-action-btn" onClick={onEdit} title="Edit">
+            <Pencil size={16} />
           </button>
-        </Tooltip>
-        
+        )}
+
         {onShare && !isTrashView && item.vaultType !== "shared" && (
-          <Tooltip content="Share">
-            <button
-              type="button"
-              onClick={onShare}
-              style={{
-                padding: "0.5rem",
-                borderRadius: "0.5rem",
-                color: "var(--color-security-blue)",
-                background: "transparent",
-                border: "none",
-                cursor: "pointer",
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-              }}
-              onMouseEnter={(e) => e.currentTarget.style.backgroundColor = "rgba(37,99,235,0.1)"}
-              onMouseLeave={(e) => e.currentTarget.style.backgroundColor = "transparent"}
-            >
-              <Share2 size={16} />
-            </button>
-          </Tooltip>
+          <button type="button" className="vault-action-btn share" onClick={onShare} title="Share">
+            <Share2 size={16} />
+          </button>
         )}
 
         {onHistory && (
-          <Tooltip content="History">
-            <button
-              type="button"
-              onClick={onHistory}
-              style={{
-                padding: "0.5rem",
-                borderRadius: "0.5rem",
-                color: "var(--color-text-subtle)",
-                background: "transparent",
-                border: "none",
-                cursor: "pointer",
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-              }}
-              onMouseEnter={(e) => e.currentTarget.style.backgroundColor = "var(--color-bg-light)"}
-              onMouseLeave={(e) => e.currentTarget.style.backgroundColor = "transparent"}
-            >
-              <History size={16} />
-            </button>
-          </Tooltip>
-        )}
-        
-        {!isTrashView && (
-          <Tooltip content="Edit">
-            <button
-              type="button"
-              onClick={onEdit}
-              style={{
-                padding: "0.5rem",
-                borderRadius: "0.5rem",
-                color: "var(--color-security-blue)",
-                background: "transparent",
-                border: "none",
-                cursor: "pointer",
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-              }}
-              onMouseEnter={(e) => e.currentTarget.style.backgroundColor = "rgba(37,99,235,0.1)"}
-              onMouseLeave={(e) => e.currentTarget.style.backgroundColor = "transparent"}
-            >
-              <Pencil size={16} />
-            </button>
-          </Tooltip>
+          <button type="button" className="vault-action-btn" onClick={onHistory} title="History">
+            <History size={16} />
+          </button>
         )}
 
         {isTrashView ? (
-          <Tooltip content="Restore">
-            <button
-              type="button"
-              onClick={onRestore}
-              style={{
-                padding: "0.5rem",
-                borderRadius: "0.5rem",
-                color: "var(--color-security-blue)",
-                background: "transparent",
-                border: "none",
-                cursor: "pointer",
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-              }}
-              onMouseEnter={(e) => e.currentTarget.style.backgroundColor = "rgba(37,99,235,0.1)"}
-              onMouseLeave={(e) => e.currentTarget.style.backgroundColor = "transparent"}
-            >
-              <RotateCcw size={16} />
-            </button>
-          </Tooltip>
+          <button type="button" className="vault-action-btn restore" onClick={onRestore} title="Restore">
+            <RotateCcw size={16} />
+          </button>
         ) : (
-          <Tooltip content="Delete">
-            <button
-              type="button"
-              onClick={onDelete}
-              style={{
-                padding: "0.5rem",
-                borderRadius: "0.5rem",
-                color: "var(--color-red, #EF4444)",
-                background: "transparent",
-                border: "none",
-                cursor: "pointer",
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-              }}
-              onMouseEnter={(e) => e.currentTarget.style.backgroundColor = "rgba(239, 68, 68, 0.1)"}
-              onMouseLeave={(e) => e.currentTarget.style.backgroundColor = "transparent"}
-            >
-              <Trash2 size={16} />
-            </button>
-          </Tooltip>
+          <button type="button" className="vault-action-btn danger" onClick={onDelete} title="Delete">
+            <Trash2 size={16} />
+          </button>
         )}
       </div>
     </div>
@@ -344,87 +179,36 @@ export function VaultItemsList({
   onShare,
 }: VaultItemsListProps) {
   return (
-    <div
-      style={{
-        background: "var(--color-white)",
-        border: "1px solid var(--color-border)",
-        borderRadius: "var(--radius-2xl)",
-        padding: "var(--spacing-main-y) var(--spacing-main-x)",
-        boxShadow: "var(--shadow-sm)",
-      }}
-    >
-      <div
-        style={{
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "space-between",
-          marginBottom: "1.25rem",
-        }}
-      >
-        <div>
-          <h2
-            style={{
-              fontSize: "1.125rem",
-              fontWeight: 600,
-              color: "var(--color-text-main)",
-              marginBottom: "0.25rem",
-            }}
-          >
-            {isTrashView ? "Trash" : "Saved Items"}
+    <div className="vault-items-panel">
+      <div className="vault-items-header">
+        <div style={{ display: "flex", alignItems: "baseline", gap: "0.75rem" }}>
+          <h2 className="vault-items-title" style={{ fontSize: "1.25rem", fontWeight: 700 }}>
+            {isTrashView ? "Trash" : "Saved Credentials"}
           </h2>
-          <p style={{ fontSize: "0.875rem", color: "var(--color-text-subtle)" }}>
-            {items.length} item{items.length !== 1 ? "s" : ""} {isTrashView ? "available for restore" : "in this vault"}
-          </p>
+          <span className="vault-items-subtitle" style={{ fontWeight: 600, color: "var(--color-text-light)" }}>
+            {items.length} total
+          </span>
         </div>
-        <button
-          type="button"
-          onClick={onRefresh}
-          style={{
-            fontSize: "0.8125rem",
-            fontWeight: 600,
-            color: "var(--color-security-blue)",
-            background: "none",
-            border: "none",
-            cursor: "pointer",
-          }}
-        >
+        <button type="button" className="vault-items-refresh" onClick={onRefresh}>
           Refresh
         </button>
       </div>
 
       {loading ? (
-        <div
-          style={{
-            textAlign: "center",
-            padding: "2rem",
-            color: "var(--color-text-subtle)",
-            fontSize: "0.875rem",
-          }}
-        >
-          Loading items…
-        </div>
+        <div className="vault-items-loading">Loading items…</div>
       ) : items.length === 0 ? (
-        <div style={{ textAlign: "center", padding: "3rem 1rem" }}>
-          <div
-            style={{
-              width: "3rem",
-              height: "3rem",
-              background: "var(--color-soft-gray)",
-              borderRadius: "var(--radius-xl)",
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              margin: "0 auto 0.75rem",
-            }}
-          >
-            <Lock size={20} style={{ color: "var(--color-text-light)" }} />
+        <div className="vault-empty">
+          <div className="vault-empty-icon">
+            <Lock size={20} />
           </div>
-          <p style={{ fontSize: "0.875rem", color: "var(--color-text-subtle)" }}>
-            {isTrashView ? "Trash is empty." : "No items yet. Add your first credential above."}
+          <p className="vault-empty-copy">
+            {isTrashView
+              ? "Trash is empty."
+              : "No items yet. Add your first credential above."}
           </p>
         </div>
       ) : (
-        <div style={{ display: "flex", flexDirection: "column", gap: "0.625rem" }}>
+        <div className="vault-items-list">
           {items.map((item) => (
             <VaultItemRow
               key={item.id}

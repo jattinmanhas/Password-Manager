@@ -41,7 +41,7 @@ const KEK_WRAP_AAD = "pmv2:recovery-kek-wrap:v1";
 export function SecuritySection() {
     return (
         <div style={{ display: "flex", flexDirection: "column", gap: "2rem" }}>
-            <div style={{ padding: "0 0.5rem" }}>
+            <div className="settings-section-header" style={{ padding: "0 0.5rem" }}>
                 <h3 style={{ fontSize: "1.25rem", fontWeight: 700, color: "var(--color-text-main)", marginBottom: "0.5rem" }}>
                     Security
                 </h3>
@@ -145,7 +145,7 @@ function TwoFactorCard() {
 
     return (
         <div style={cardStyle}>
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: "1rem" }}>
+            <div className="settings-split-header" style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: "1rem", gap: "1rem" }}>
                 <div style={{ display: "flex", gap: "1rem", alignItems: "center" }}>
                     <div style={{
                         width: "2.5rem", height: "2.5rem", borderRadius: "50%",
@@ -272,7 +272,7 @@ function RecoveryCard() {
 
     return (
         <div style={cardStyle}>
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: "1rem" }}>
+            <div className="settings-split-header" style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: "1rem", gap: "1rem" }}>
                 <div style={{ display: "flex", gap: "1rem", alignItems: "center" }}>
                     <div style={{
                         width: "2.5rem", height: "2.5rem", borderRadius: "50%",
@@ -324,7 +324,7 @@ function RecoveryCard() {
                         }}>
                             {recoveryKey}
                         </div>
-                        <div style={{ display: "flex", gap: "0.5rem" }}>
+                        <div className="settings-inline-actions" style={{ display: "flex", gap: "0.5rem" }}>
                             <Button variant="ghost" size="sm" onClick={() => { navigator.clipboard.writeText(recoveryKey!); toast.success("Copied"); }} style={{ flex: 1, fontSize: "0.75rem" }}>
                                 <Copy size={12} style={{ marginRight: "0.375rem" }} /> Copy
                             </Button>

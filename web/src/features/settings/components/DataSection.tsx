@@ -47,7 +47,7 @@ function ExportCard() {
   };
 
   return (
-    <div style={cardStyle}>
+    <div className="settings-card-tight" style={cardStyle}>
       <div style={cardHeaderStyle}>
         <div style={iconContainerStyle("var(--color-security-blue)")}>
           <Download size={20} color="white" />
@@ -177,7 +177,7 @@ function ImportCard() {
   const isLocked = !kek || !aead || !isKekVerified;
 
   return (
-    <div style={cardStyle}>
+    <div className="settings-card-tight" style={cardStyle}>
       <div style={cardHeaderStyle}>
         <div style={iconContainerStyle("#7C3AED")}>
           <Upload size={20} color="white" />
@@ -384,7 +384,7 @@ function ImportCard() {
 export function DataSection() {
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: "2rem" }}>
-      <div style={{ padding: "0 0.5rem" }}>
+      <div className="settings-section-header" style={{ padding: "0 0.5rem" }}>
         <h3 style={{ fontSize: "1.25rem", fontWeight: 700, color: "var(--color-text-main)", marginBottom: "0.5rem" }}>
           Data & Portability
         </h3>

@@ -203,32 +203,33 @@ export function SharedByMe() {
   return (
     <div style={{ maxWidth: "1000px", margin: "0 auto", paddingBottom: "2rem" }}>
       {/* Header */}
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "2rem" }}>
-        <div>
-          <div style={{ display: "flex", alignItems: "center", gap: "0.75rem", marginBottom: "0.25rem" }}>
-            <div style={{ 
-              width: "2.5rem", 
-              height: "2.5rem", 
-              background: "rgba(37, 99, 235, 0.1)", 
-              borderRadius: "0.75rem", 
-              display: "flex", 
-              alignItems: "center", 
-              justifyContent: "center",
-              color: "var(--color-security-blue)"
-            }}>
-              <Share2 size={20} />
+      <div className="sharing-header">
+        <div className="sharing-header-info">
+          <div className="sharing-header-title-wrap">
+            <div className="sharing-header-icon">
+              <Share2 size={24} />
             </div>
-            <h1 style={{ fontSize: "1.5rem", fontWeight: 700, color: "var(--color-text-main)", margin: 0 }}>
+            <h1 className="sharing-header-title">
               Secrets I've Shared
             </h1>
           </div>
-          <p style={{ color: "var(--color-text-subtle)", margin: 0, fontSize: "0.9375rem" }}>
+          <p className="sharing-header-description">
             Manage access to secrets you have shared with family members.
           </p>
         </div>
 
-        <Button variant="outline" size="sm" onClick={() => void loadShares()} disabled={loading} style={{ width: "fit-content" }}>
-          <RefreshCw size={16} style={{ marginRight: "0.5rem", animation: loading ? "spin 1s linear infinite" : "none" }} />
+        <Button 
+          variant="outline" 
+          size="sm" 
+          onClick={() => void loadShares()} 
+          disabled={loading} 
+          className="mobile-full-width"
+          style={{ width: "fit-content", gap: "0.5rem" }}
+        >
+          <RefreshCw 
+            size={16} 
+            style={{ animation: loading ? "spin 1s linear infinite" : "none" }} 
+          />
           Refresh
         </Button>
       </div>

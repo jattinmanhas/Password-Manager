@@ -19,7 +19,7 @@ export function AppearanceSection() {
 
     return (
         <div style={{ display: "flex", flexDirection: "column", gap: "2rem" }}>
-            <div style={{ padding: "0 0.5rem" }}>
+            <div className="settings-section-header" style={{ padding: "0 0.5rem" }}>
                 <h3 style={{ fontSize: "1.25rem", fontWeight: 700, color: "var(--color-text-main)", marginBottom: "0.5rem" }}>
                     Appearance
                 </h3>
@@ -30,19 +30,19 @@ export function AppearanceSection() {
 
             <div style={{ display: "flex", flexDirection: "column", gap: "1.5rem" }}>
                 {/* Theme Selector - Enhanced */}
-                <div style={{
+                <div className="settings-card-tight" style={{
                     padding: "1.5rem",
                     borderRadius: "var(--radius-xl)",
                     background: "var(--color-bg-surface, var(--color-white))",
                     border: "1px solid var(--color-border)",
                     boxShadow: "var(--shadow-sm)"
                 }}>
-                    <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "1rem" }}>
+                    <div className="settings-split-header" style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "1rem", gap: "1rem" }}>
                         <div>
                             <h4 style={{ fontSize: "1rem", fontWeight: 600, color: "var(--color-text-main)", margin: 0 }}>Color Theme</h4>
                             <p style={{ fontSize: "0.875rem", color: "var(--color-text-subtle)", marginTop: "0.25rem" }}>Choose your preferred color scheme.</p>
                         </div>
-                        <div style={{ 
+                        <div className="settings-choice-group settings-choice-group--triple" style={{ 
                             display: "inline-flex", 
                             background: "var(--color-soft-gray)", 
                             padding: "0.25rem", 
@@ -81,19 +81,19 @@ export function AppearanceSection() {
                 </div>
 
                 {/* UI Density */}
-                <div style={{
+                <div className="settings-card-tight" style={{
                     padding: "1.5rem",
                     borderRadius: "var(--radius-xl)",
                     background: "var(--color-bg-surface, var(--color-white))",
                     border: "1px solid var(--color-border)",
                     boxShadow: "var(--shadow-sm)"
                 }}>
-                    <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                    <div className="settings-split-header" style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "1rem" }}>
                         <div>
                             <h4 style={{ fontSize: "1rem", fontWeight: 600, color: "var(--color-text-main)", margin: 0 }}>Interface Density</h4>
                             <p style={{ fontSize: "0.875rem", color: "var(--color-text-subtle)", marginTop: "0.25rem" }}>Adjust the layout to show more or less information.</p>
                         </div>
-                        <div style={{ 
+                        <div className="settings-choice-group" style={{ 
                             display: "inline-flex", 
                             background: "var(--color-soft-gray)", 
                             padding: "0.25rem", 
@@ -143,14 +143,14 @@ export function AppearanceSection() {
                 </div>
 
                 {/* Security Masking */}
-                <div style={{
+                <div className="settings-card-tight" style={{
                     padding: "1.5rem",
                     borderRadius: "var(--radius-xl)",
                     background: "var(--color-bg-surface, var(--color-white))",
                     border: "1px solid var(--color-border)",
                     boxShadow: "var(--shadow-sm)"
                 }}>
-                    <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                    <div className="settings-split-header" style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "1rem" }}>
                         <div style={{ display: "flex", gap: "1rem", alignItems: "flex-start" }}>
                             <div style={{
                                 width: "2.5rem",

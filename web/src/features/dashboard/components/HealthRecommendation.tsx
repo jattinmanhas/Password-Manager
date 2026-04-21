@@ -22,7 +22,7 @@ export const HealthRecommendation: React.FC<HealthRecommendationProps> = ({
   if (!hasIssues) return null;
 
   return (
-    <div style={{ 
+    <div className="dashboard-health-recommendation" style={{ 
       marginTop: '2.5rem', 
       padding: '1.25rem', 
       borderRadius: '1rem', 

@@ -32,6 +32,7 @@ import {
   AuditFilter,
 } from "../services/audit.service";
 import { Button } from "../../../components/ui/Button";
+import { Input } from "../../../components/ui/Input";
 import { Select } from "../../../components/ui/Select";
 
 // Helper to format timestamps
@@ -196,6 +197,14 @@ const importanceStyles: Record<
 };
 
 export const Activity = () => {
+  const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
+
+  useEffect(() => {
+    const handleResize = () => setIsMobile(window.innerWidth < 768);
+    window.addEventListener("resize", handleResize);
+    return () => window.removeEventListener("resize", handleResize);
+  }, []);
+
   const [events, setEvents] = useState<AuditEvent[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
@@ -304,41 +313,24 @@ export const Activity = () => {
     });
     return groups;
   }, [events]);
+  const statusBadgeLabel =
+    status === "secure"
+      ? "Healthy"
+      : status === "warning"
+        ? "Audit Alert"
+        : "Pending";
+  const refreshActivity = () => {
+    setOffset(0);
+    loadEvents(0, true, { query: searchQuery, category });
+    fetchStatus();
+  };
 
   return (
-    <div
-      style={{
-        maxWidth: "1000px",
-        margin: "0 auto",
-        display: "flex",
-        flexDirection: "column",
-        gap: "2rem",
-      }}
-    >
+    <div className="activity-page">
       {/* Page Header */}
-      <div
-        style={{
-          display: "flex",
-          justifyContent: "space-between",
-          alignItems: "flex-start",
-          flexWrap: "wrap",
-          gap: "1.5rem",
-        }}
-      >
-        <div style={{ display: "flex", alignItems: "center", gap: "0.75rem" }}>
-          <div
-            style={{
-              width: "2.5rem",
-              height: "2.5rem",
-              background: "rgba(37,99,235,0.1)",
-              borderRadius: "var(--radius-xl)",
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              color: "var(--color-security-blue)",
-              flexShrink: 0,
-            }}
-          >
+      <div className="activity-hero header-row-responsive">
+        <div className="activity-hero-copy">
+          <div className="activity-hero-icon">
             <History size={20} />
           </div>
           <div>
@@ -364,22 +356,12 @@ export const Activity = () => {
             </p>
           </div>
         </div>
-        <div
-          style={{
-            display: "flex",
-            gap: "0.5rem",
-            flexShrink: 0,
-            alignItems: "center",
-          }}
-        >
+        <div className="activity-hero-actions flex-responsive">
           <Button
             variant="ghost"
             size="sm"
-            onClick={() => {
-              setOffset(0);
-              loadEvents(0, true, { query: searchQuery, category });
-              fetchStatus();
-            }}
+            onClick={refreshActivity}
+            className="activity-toolbar-button"
             style={{
               height: "2.25rem",
               padding: "0 0.75rem",
@@ -399,6 +381,7 @@ export const Activity = () => {
             variant="outline"
             size="sm"
             onClick={handleClearLogs}
+            className="activity-toolbar-button mobile-full-width"
             style={{
               height: "2.25rem",
               padding: "0 0.75rem",
@@ -425,6 +408,7 @@ export const Activity = () => {
 
       {/* Security Status Section */}
       <section
+        className="activity-status-card"
         style={{
           background:
             status === "secure"
@@ -434,10 +418,12 @@ export const Activity = () => {
                 : "var(--color-white)",
           border: "1px solid var(--color-border)",
           borderRadius: "var(--radius-2xl)",
-          padding: "1.5rem",
+          padding: isMobile ? "0.75rem" : "1.5rem",
           display: "flex",
           alignItems: "center",
-          gap: "1.25rem",
+          gap: isMobile ? "0.75rem" : "1.25rem",
+          width: "100%",
+          minWidth: 0,
         }}
       >
         <div
@@ -471,7 +457,7 @@ export const Activity = () => {
             <Shield style={{ color: "var(--color-text-subtle)" }} size={22} />
           )}
         </div>
-        <div style={{ flex: 1 }}>
+        <div className="activity-status-copy">
           <h3
             style={{
               margin: 0,
@@ -494,74 +480,54 @@ export const Activity = () => {
             }}
           >
             {status === "secure"
-              ? "No suspicious activity detected in the last 24 hours."
+              ? "No suspicious activity detected recently."
               : status === "warning"
-                ? "Potential suspicious activity recorded recently. Please review the logs."
-                : "Analyzing audit trails for anomalies..."}
+                ? "Potential suspicious activity detected."
+                : "Analyzing audit trails..."}
           </p>
         </div>
-        <div
-          style={{
-            padding: "0.25rem 0.75rem",
-            borderRadius: "99px",
-            fontSize: "0.75rem",
-            fontWeight: 600,
-            backgroundColor:
-              status === "secure"
-                ? "var(--color-emerald-subtle)"
-                : status === "warning"
-                  ? "var(--color-amber-subtle)"
-                  : "rgba(0,0,0,0.05)",
-            color:
-              status === "secure"
-                ? "var(--color-emerald)"
-                : status === "warning"
-                  ? "var(--color-amber)"
-                  : "var(--color-text-subtle)",
-            border: "1px solid currentColor",
-            opacity: 0.8,
-          }}
-        >
-          {status === "secure"
-            ? "Healthy"
-            : status === "warning"
-              ? "Audit Alert"
-              : "Pending"}
-        </div>
+        {!isMobile && (
+          <div
+            className="activity-status-pill"
+            style={{
+              padding: "0.25rem 0.75rem",
+              borderRadius: "99px",
+              fontSize: "0.75rem",
+              fontWeight: 600,
+              backgroundColor:
+                status === "secure"
+                  ? "var(--color-emerald-subtle)"
+                  : status === "warning"
+                    ? "var(--color-amber-subtle)"
+                    : "rgba(0,0,0,0.05)",
+              color:
+                status === "secure"
+                  ? "var(--color-emerald)"
+                  : status === "warning"
+                    ? "var(--color-amber)"
+                    : "var(--color-text-subtle)",
+              border: "1px solid currentColor",
+              opacity: 0.8,
+            }}
+          >
+            {statusBadgeLabel}
+          </div>
+        )}
       </section>
 
       {/* Filter Bar */}
-      <div style={{ display: "flex", gap: "0.75rem", flexWrap: "wrap" }}>
-        <div style={{ position: "relative", flex: 1, minWidth: "200px" }}>
-          <Search
-            size={16}
-            style={{
-              position: "absolute",
-              left: "1rem",
-              top: "50%",
-              transform: "translateY(-50%)",
-              color: "var(--color-text-light)",
-            }}
-          />
-          <input
+      <div className="activity-filter-bar">
+        <div className="activity-filter-search">
+          <Search size={16} className="activity-filter-search-icon" />
+          <Input
             type="text"
             placeholder="Search ledger..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            style={{
-              width: "100%",
-              height: "2.75rem",
-              padding: "0 1rem 0 2.5rem",
-              borderRadius: "var(--radius-xl)",
-              border: "1px solid var(--color-border)",
-              backgroundColor: "var(--color-white)",
-              fontSize: "0.875rem",
-              outline: "none",
-              transition: "border-color 0.15s ease-in-out",
-            }}
+            className="activity-filter-input"
           />
         </div>
-        <div style={{ width: "200px" }}>
+        <div className="activity-filter-select">
           <Select
             value={category}
             onChange={setCategory}
@@ -654,38 +620,14 @@ export const Activity = () => {
           </p>
         </div>
       ) : (
-        <div style={{ display: "flex", flexDirection: "column", gap: "2.5rem" }}>
+        <div className="activity-log-groups">
           {Object.keys(groupedEvents).map((dateKey) => (
-            <div
-              key={dateKey}
-              style={{
-                display: "flex",
-                flexDirection: "column",
-                gap: "0.75rem",
-              }}
-            >
-              <div
-                style={{
-                  fontSize: "0.75rem",
-                  fontWeight: 700,
-                  color: "var(--color-text-subtle)",
-                  textTransform: "uppercase",
-                  letterSpacing: "0.05em",
-                  paddingLeft: "0.5rem",
-                }}
-              >
+            <div key={dateKey} className="activity-log-group">
+              <div className="activity-log-date">
                 {formatDateHeader(dateKey)}
               </div>
 
-              <div
-                style={{
-                  backgroundColor: "var(--color-white)",
-                  borderRadius: "var(--radius-xl)",
-                  border: "1px solid var(--color-border)",
-                  overflow: "hidden",
-                  boxShadow: "0 2px 4px -1px rgba(0,0,0,0.02)",
-                }}
-              >
+              <div className="activity-log-panel">
                 {groupedEvents[dateKey].map((event, idx) => {
                   const details = getEventDetails(event);
                   const style = importanceStyles[details.importance];
@@ -695,6 +637,7 @@ export const Activity = () => {
 
                   return (
                     <div
+                      className="activity-log-row"
                       key={event.id}
                       ref={isLastGlobal ? lastEventElementRef : null}
                       style={{
@@ -731,8 +674,9 @@ export const Activity = () => {
                         {details.icon}
                       </div>
 
-                      <div style={{ flex: 1, minWidth: 0 }}>
+                      <div className="activity-log-main" style={{ flex: 1, minWidth: 0 }}>
                         <div
+                          className="activity-log-heading"
                           style={{
                             display: "flex",
                             alignItems: "center",
@@ -740,37 +684,47 @@ export const Activity = () => {
                           }}
                         >
                           <h4
+                            className="activity-log-title"
                             style={{
                               margin: 0,
-                              fontSize: "0.9375rem",
+                              fontSize: isMobile ? "0.875rem" : "0.9375rem",
                               fontWeight: 600,
                               color: "var(--color-text-main)",
+                              whiteSpace: isMobile ? "normal" : "nowrap",
+                              overflow: "hidden",
+                              textOverflow: "ellipsis",
+                              minWidth: 0,
                             }}
                           >
                             {details.title}
                           </h4>
-                          <span
-                            style={{
-                              fontSize: "0.625rem",
-                              fontWeight: 700,
-                              textTransform: "uppercase",
-                              padding: "0.125rem 0.375rem",
-                              borderRadius: "4px",
-                              backgroundColor: "var(--color-soft-gray)",
-                              color: "var(--color-text-subtle)",
-                            }}
-                          >
-                            {details.label}
-                          </span>
+                          {!isMobile && (
+                            <span
+                              style={{
+                                fontSize: "0.625rem",
+                                fontWeight: 700,
+                                textTransform: "uppercase",
+                                padding: "0.125rem 0.375rem",
+                                borderRadius: "4px",
+                                backgroundColor: "var(--color-soft-gray)",
+                                color: "var(--color-text-subtle)",
+                                flexShrink: 0,
+                              }}
+                            >
+                              {details.label}
+                            </span>
+                          )}
                         </div>
                         <p
+                          className="activity-log-text"
                           style={{
                             margin: 0,
-                            fontSize: "0.8125rem",
+                            fontSize: "0.75rem",
                             color: "var(--color-text-subtle)",
-                            whiteSpace: "nowrap",
+                            whiteSpace: isMobile ? "normal" : "nowrap",
                             overflow: "hidden",
                             textOverflow: "ellipsis",
+                            minWidth: 0,
                           }}
                         >
                           {details.text}
@@ -778,6 +732,7 @@ export const Activity = () => {
                       </div>
 
                       <div
+                        className="activity-log-meta"
                         style={{
                           display: "flex",
                           flexDirection: "column",
