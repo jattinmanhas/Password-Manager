@@ -13,6 +13,7 @@ import (
 	"pmv2/backend/internal/config"
 	"pmv2/backend/internal/database"
 	"pmv2/backend/internal/logger"
+	"pmv2/backend/internal/mailer"
 	"pmv2/backend/internal/repository"
 	"pmv2/backend/internal/router"
 	"pmv2/backend/internal/service"
@@ -52,8 +53,10 @@ func main() {
 	familyRepository := repository.NewFamilyRepository(postgres.SQL())
 	auditRepository := repository.NewAuditRepository(postgres.SQL())
 
+	emailMailer := mailer.New(cfg.ResendAPIKey, cfg.EmailFrom, log)
+
 	auditService := service.NewAuditService(auditRepository)
-	authService := service.NewAuthService(authRepository, auditService, cfg.AuthPepper, cfg.SessionTTL, cfg.TOTPIssuer)
+	authService := service.NewAuthService(authRepository, auditService, emailMailer, cfg.AuthPepper, cfg.SessionTTL, cfg.TOTPIssuer, cfg.AppBaseURL)
 	vaultService := service.NewVaultService(vaultRepository, auditService)
 	folderService := service.NewFolderService(folderRepository)
 	sharingService := service.NewSharingService(sharingRepository, userKeysRepository, vaultRepository, familyRepository, auditService)

@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"crypto/sha256"
 	"crypto/subtle"
 	"errors"
 	"fmt"
@@ -10,6 +11,7 @@ import (
 	"github.com/google/uuid"
 
 	"pmv2/backend/internal/domain"
+	"pmv2/backend/internal/mailer"
 	"pmv2/backend/internal/util"
 )
 
@@ -21,17 +23,24 @@ type AuthService struct {
 	totpSecretKey []byte
 	now           func() time.Time
 	audit         *AuditService
+	loginThrottle *loginThrottle
+	mailer        mailer.Mailer
+	appBaseURL    string
 }
 
-func NewAuthService(repo domain.AuthRepository, audit *AuditService, pepper string, sessionTTL time.Duration, issuer string) *AuthService {
+func NewAuthService(repo domain.AuthRepository, audit *AuditService, mail mailer.Mailer, pepper string, sessionTTL time.Duration, issuer string, appBaseURL string) *AuthService {
+	now := time.Now
 	return &AuthService{
 		repo:          repo,
 		pepper:        pepper,
 		sessionTTL:    sessionTTL,
 		totpIssuer:    issuer,
 		totpSecretKey: util.DeriveTOTPEncryptionKey(pepper),
-		now:           time.Now,
+		now:           now,
 		audit:         audit,
+		loginThrottle: newLoginThrottle(loginMaxAttempts, loginAttemptWindow, loginLockDuration, now),
+		mailer:        mail,
+		appBaseURL:    appBaseURL,
 	}
 }
 
@@ -39,7 +48,13 @@ const (
 	totpMaxAttempts   = 5
 	totpAttemptWindow = 30 * time.Second
 	totpLockDuration  = 5 * time.Minute
-	recoveryCodeCount = 10
+
+	loginMaxAttempts   = 10
+	loginAttemptWindow = 15 * time.Minute
+	loginLockDuration  = 15 * time.Minute
+
+	emailCodeTTL         = 10 * time.Minute
+	emailCodeMaxAttempts = 5
 )
 
 func (s *AuthService) Register(ctx context.Context, email string, password string, name string) (domain.RegisterOutput, error) {
@@ -48,20 +63,25 @@ func (s *AuthService) Register(ctx context.Context, email string, password strin
 		return domain.RegisterOutput{}, domain.ErrInvalidCredentials
 	}
 
-	if err := util.ValidatePasswordStrength(password); err != nil {
+	// `password` carries the client-derived authentication verifier
+	// (Argon2id over the master password). Password-strength rules are
+	// enforced on the client; here we only validate the verifier shape.
+	if err := util.ValidateAuthVerifier(password); err != nil {
 		return domain.RegisterOutput{}, err
 	}
 
-	params := util.DefaultArgon2Params()
-	paramsJSON, err := util.MarshalArgon2Params(params)
+	paramsJSON, err := util.MarshalArgon2Params(util.DefaultArgon2Params())
 	if err != nil {
 		return domain.RegisterOutput{}, fmt.Errorf("marshal argon2 params: %w", err)
 	}
 
-	salt, passwordHash, err := util.HashPassword(password, params)
+	// salt is the per-user vault KDF salt (consumed client-side on first
+	// vault unlock); the auth hash itself is independent of it.
+	salt, err := util.NewRandomSalt(32)
 	if err != nil {
 		return domain.RegisterOutput{}, err
 	}
+	passwordHash := util.HashAuthVerifier(password, s.pepper)
 
 	userID, err := util.NewUUID()
 	if err != nil {
@@ -73,7 +93,7 @@ func (s *AuthService) Register(ctx context.Context, email string, password strin
 		UserID:       userID,
 		Email:        normalizedEmail,
 		Name:         trimmedName,
-		Algo:         "argon2id",
+		Algo:         "client-argon2id-sha256",
 		ParamsJSON:   paramsJSON,
 		Salt:         salt,
 		PasswordHash: passwordHash,
@@ -98,27 +118,38 @@ func (s *AuthService) Login(ctx context.Context, input domain.LoginInput) (domai
 		return domain.LoginOutput{}, domain.ErrInvalidCredentials
 	}
 	trimmedTOTPCode := util.TrimOrEmpty(input.TOTPCode)
-	trimmedRecoveryCode := util.TrimOrEmpty(input.RecoveryCode)
-	if trimmedTOTPCode != "" && trimmedRecoveryCode != "" {
+	trimmedEmailCode := util.TrimOrEmpty(input.EmailCode)
+	if trimmedTOTPCode != "" && trimmedEmailCode != "" {
 		return domain.LoginOutput{}, domain.ErrInvalidMFAInput
+	}
+
+	// Per-account lockout for failed password attempts, keyed by email so it
+	// applies regardless of source IP.
+	if s.loginThrottle.locked(normalizedEmail) {
+		return domain.LoginOutput{}, domain.ErrLoginRateLimited
 	}
 
 	record, err := s.repo.GetUserAuthByEmail(ctx, normalizedEmail)
 	if err != nil {
 		if errors.Is(err, domain.ErrNotFound) {
+			// Flatten timing so an unknown email costs the same as a wrong
+			// verifier, preventing account enumeration via response time.
+			_ = subtle.ConstantTimeCompare(util.HashAuthVerifier(input.Password, s.pepper), make([]byte, sha256.Size))
+			s.loginThrottle.recordFailure(normalizedEmail)
 			return domain.LoginOutput{}, domain.ErrInvalidCredentials
 		}
 		return domain.LoginOutput{}, fmt.Errorf("read auth record: %w", err)
 	}
 
-	params, err := util.ParseArgon2Params(record.RawParams)
-	if err != nil {
-		return domain.LoginOutput{}, fmt.Errorf("parse hash params: %w", err)
-	}
-
-	if !util.VerifyPassword(input.Password, record.Salt, record.PasswordHash, params) {
+	// `input.Password` carries the client-derived authentication verifier.
+	if subtle.ConstantTimeCompare(util.HashAuthVerifier(input.Password, s.pepper), record.PasswordHash) != 1 {
+		if s.loginThrottle.recordFailure(normalizedEmail) {
+			return domain.LoginOutput{}, domain.ErrLoginRateLimited
+		}
 		return domain.LoginOutput{}, domain.ErrInvalidCredentials
 	}
+
+	s.loginThrottle.reset(normalizedEmail)
 
 	if record.TOTPEnabled {
 		nowUTC := s.now().UTC()
@@ -126,20 +157,20 @@ func (s *AuthService) Login(ctx context.Context, input domain.LoginInput) (domai
 			return domain.LoginOutput{}, domain.ErrMFARateLimited
 		}
 
-		if trimmedTOTPCode == "" && trimmedRecoveryCode == "" {
+		if trimmedTOTPCode == "" && trimmedEmailCode == "" {
 			return domain.LoginOutput{}, domain.ErrMFARequired
 		}
 
-		if trimmedRecoveryCode != "" {
-			consumed, err := s.repo.ConsumeRecoveryCode(ctx, record.UserID, util.HashRecoveryCode(trimmedRecoveryCode, s.pepper))
+		if trimmedEmailCode != "" {
+			ok, err := s.consumeEmailCode(ctx, record.UserID, domain.EmailCodePurposeMFARecovery, trimmedEmailCode, nowUTC)
 			if err != nil {
-				return domain.LoginOutput{}, fmt.Errorf("consume recovery code: %w", err)
+				return domain.LoginOutput{}, fmt.Errorf("consume mfa email code: %w", err)
 			}
-			if !consumed {
+			if !ok {
 				return domain.LoginOutput{}, s.recordMFAFailure(ctx, record.UserID, nowUTC)
 			}
 			if err := s.repo.ResetTOTPFailures(ctx, record.UserID); err != nil {
-				return domain.LoginOutput{}, fmt.Errorf("reset totp failures after recovery code login: %w", err)
+				return domain.LoginOutput{}, fmt.Errorf("reset totp failures after email code login: %w", err)
 			}
 		} else {
 			secret, err := util.ParseStoredTOTPSecret(record.TOTPSecretEnc, s.totpSecretKey)
@@ -264,48 +295,49 @@ func (s *AuthService) BeginTOTPSetup(ctx context.Context, userID string, email s
 	}, nil
 }
 
-func (s *AuthService) EnableTOTP(ctx context.Context, userID string, code string) ([]string, error) {
+func (s *AuthService) EnableTOTP(ctx context.Context, userID string, code string) error {
 	state, err := s.repo.GetTOTPState(ctx, userID)
 	if err != nil {
 		if errors.Is(err, domain.ErrNotFound) {
-			return nil, domain.ErrUnauthorizedSession
+			return domain.ErrUnauthorizedSession
 		}
-		return nil, fmt.Errorf("read totp state: %w", err)
+		return fmt.Errorf("read totp state: %w", err)
 	}
 
 	nowUTC := s.now().UTC()
 	if s.isMFALocked(state.LockedUntil, nowUTC) {
-		return nil, domain.ErrMFARateLimited
+		return domain.ErrMFARateLimited
+	}
+
+	// Enabling is a one-time operation.
+	if state.Enabled {
+		return domain.ErrTOTPAlreadyEnabled
 	}
 
 	secret, err := util.ParseStoredTOTPSecret(state.SecretEnc, s.totpSecretKey)
 	if err != nil {
-		return nil, fmt.Errorf("decode totp secret: %w", err)
+		return fmt.Errorf("decode totp secret: %w", err)
 	}
 	if secret == "" {
-		return nil, domain.ErrMissingTOTPSecret
+		return domain.ErrMissingTOTPSecret
 	}
 
-	if state.Enabled && util.VerifyTOTP(secret, code, nowUTC) {
-		if err := s.repo.ResetTOTPFailures(ctx, userID); err != nil {
-			return nil, fmt.Errorf("reset totp failures: %w", err)
-		}
-		return s.generateAndStoreRecoveryCodes(ctx, userID)
-	}
+	// Verify the submitted code exactly once.
 	if !util.VerifyTOTP(secret, code, nowUTC) {
-		return nil, s.recordMFAFailure(ctx, userID, nowUTC)
+		return s.recordMFAFailure(ctx, userID, nowUTC)
 	}
 
 	if err := s.repo.EnableTOTP(ctx, userID); err != nil {
 		if errors.Is(err, domain.ErrNotFound) {
-			return nil, domain.ErrUnauthorizedSession
+			return domain.ErrUnauthorizedSession
 		}
-		return nil, fmt.Errorf("enable totp: %w", err)
+		return fmt.Errorf("enable totp: %w", err)
 	}
 	if err := s.repo.ResetTOTPFailures(ctx, userID); err != nil {
-		return nil, fmt.Errorf("reset totp failures: %w", err)
+		return fmt.Errorf("reset totp failures: %w", err)
 	}
-	return s.generateAndStoreRecoveryCodes(ctx, userID)
+	// MFA recovery is handled via emailed codes, so no backup codes are issued.
+	return nil
 }
 
 func (s *AuthService) VerifyTOTPForSession(ctx context.Context, userID string, code string) error {
@@ -366,212 +398,223 @@ func (s *AuthService) recordMFAFailure(ctx context.Context, userID string, now t
 	return domain.ErrInvalidMFA
 }
 
-func (s *AuthService) generateAndStoreRecoveryCodes(ctx context.Context, userID string) ([]string, error) {
-	codes, err := util.GenerateRecoveryCodes(recoveryCodeCount)
-	if err != nil {
-		return nil, fmt.Errorf("generate recovery codes: %w", err)
-	}
-
-	hashes := make([][]byte, 0, len(codes))
-	for _, code := range codes {
-		hash := util.HashRecoveryCode(code, s.pepper)
-		copyHash := make([]byte, len(hash))
-		copy(copyHash, hash)
-		hashes = append(hashes, copyHash)
-	}
-
-	if err := s.repo.ReplaceRecoveryCodes(ctx, userID, hashes); err != nil {
-		return nil, fmt.Errorf("store recovery codes: %w", err)
-	}
-	return codes, nil
-}
-
 func (s *AuthService) isMFALocked(lockedUntil *time.Time, now time.Time) bool {
 	return lockedUntil != nil && lockedUntil.UTC().After(now.UTC())
 }
 
-const recoveryCooldown = 1 * time.Hour
+// recoveryTokenTTL bounds the short-lived token issued after an email reset
+// code is verified (used by the password-reset flow).
 const recoveryTokenTTL = 15 * time.Minute
 
-func (s *AuthService) SetupRecovery(ctx context.Context, userID string, recoveryKey string, wrappedKEK []byte, wrapNonce []byte, kekSalt []byte) error {
-	if util.TrimOrEmpty(recoveryKey) == "" {
-		return domain.ErrInvalidRecoveryKey
+func (s *AuthService) UpdateProfile(ctx context.Context, userID string, name string) error {
+	trimmedName := util.TrimOrEmpty(name)
+
+	if err := s.repo.UpdateDisplayName(ctx, userID, trimmedName); err != nil {
+		return fmt.Errorf("update profile: %w", err)
 	}
 
-	recoveryKeyHash := util.HashRecoveryKey(recoveryKey, s.pepper)
-
-	return s.repo.SetupRecovery(ctx, domain.SetupRecoveryInput{
-		UserID:          userID,
-		RecoveryKeyHash: recoveryKeyHash,
-		WrappedKEK:      wrappedKEK,
-		WrapNonce:       wrapNonce,
-		KEKSalt:         kekSalt,
+	uid, _ := uuid.Parse(userID)
+	s.audit.LogEvent(ctx, &uid, domain.EventTypeAuthProfileUpdated, map[string]string{
+		"updated_fields": "name",
 	})
+
+	return nil
 }
 
-func (s *AuthService) GetRecoveryStatus(ctx context.Context, userID string) (bool, error) {
-	record, err := s.repo.GetRecoveryRecord(ctx, userID)
+// ── Email verification codes (password reset + MFA recovery) ────────────────
+
+// issueEmailCode generates a fresh code for the given purpose, persists its
+// hash (invalidating any prior code), and emails it to the user.
+func (s *AuthService) issueEmailCode(ctx context.Context, userID, email, purpose, subject, intro string) error {
+	code, err := util.NewNumericCode(6)
+	if err != nil {
+		return err
+	}
+	codeID, err := util.NewUUID()
+	if err != nil {
+		return err
+	}
+	if err := s.repo.InvalidateEmailVerificationCodes(ctx, userID, purpose); err != nil {
+		return fmt.Errorf("invalidate prior codes: %w", err)
+	}
+	if err := s.repo.CreateEmailVerificationCode(ctx, domain.EmailVerificationCodeInput{
+		ID:        codeID,
+		UserID:    userID,
+		Purpose:   purpose,
+		CodeHash:  util.HashEmailCode(code, s.pepper),
+		ExpiresAt: s.now().UTC().Add(emailCodeTTL),
+	}); err != nil {
+		return fmt.Errorf("store email code: %w", err)
+	}
+
+	text := fmt.Sprintf("%s\n\nYour verification code is: %s\n\nIt expires in %d minutes. If you didn't request this, you can ignore this email.",
+		intro, code, int(emailCodeTTL.Minutes()))
+	html := fmt.Sprintf("<p>%s</p><p style=\"font-size:24px;font-weight:bold;letter-spacing:3px\">%s</p><p>It expires in %d minutes. If you didn't request this, you can ignore this email.</p>",
+		intro, code, int(emailCodeTTL.Minutes()))
+	if err := s.mailer.Send(ctx, email, subject, html, text); err != nil {
+		return fmt.Errorf("send email code: %w", err)
+	}
+	return nil
+}
+
+// consumeEmailCode verifies a submitted code for a purpose. Returns true only
+// when a non-expired, non-exhausted code matches; otherwise it records an
+// attempt and returns false. Errors are reserved for unexpected failures.
+func (s *AuthService) consumeEmailCode(ctx context.Context, userID, purpose, code string, now time.Time) (bool, error) {
+	record, err := s.repo.GetLatestEmailVerificationCode(ctx, userID, purpose)
 	if err != nil {
 		if errors.Is(err, domain.ErrNotFound) {
 			return false, nil
 		}
-		return false, fmt.Errorf("read recovery record: %w", err)
+		return false, fmt.Errorf("read email code: %w", err)
 	}
-	return record.RecoveryEnabled, nil
+
+	if now.After(record.ExpiresAt) || record.Attempts >= emailCodeMaxAttempts {
+		_ = s.repo.InvalidateEmailVerificationCodes(ctx, userID, purpose)
+		return false, nil
+	}
+
+	if subtle.ConstantTimeCompare(util.HashEmailCode(code, s.pepper), record.CodeHash) != 1 {
+		if err := s.repo.IncrementEmailVerificationAttempts(ctx, record.ID); err != nil {
+			return false, fmt.Errorf("increment email code attempts: %w", err)
+		}
+		return false, nil
+	}
+
+	if err := s.repo.MarkEmailVerificationCodeConsumed(ctx, record.ID); err != nil {
+		return false, fmt.Errorf("consume email code: %w", err)
+	}
+	return true, nil
 }
 
-func (s *AuthService) VerifyRecoveryKey(ctx context.Context, email string, recoveryKey string, totpCode string) (string, time.Time, *domain.RecoveryRecord, error) {
+// RequestPasswordResetEmail emails a reset code if the account exists. The
+// caller must always respond identically regardless of the result to avoid
+// leaking which emails are registered.
+func (s *AuthService) RequestPasswordResetEmail(ctx context.Context, email string) error {
 	normalizedEmail := util.NormalizeEmail(email)
 	if normalizedEmail == "" {
-		return "", time.Time{}, nil, domain.ErrInvalidCredentials
+		return nil
 	}
-	if util.TrimOrEmpty(recoveryKey) == "" {
-		return "", time.Time{}, nil, domain.ErrInvalidRecoveryKey
-	}
-
 	record, err := s.repo.GetUserAuthByEmail(ctx, normalizedEmail)
 	if err != nil {
 		if errors.Is(err, domain.ErrNotFound) {
-			return "", time.Time{}, nil, domain.ErrInvalidCredentials
+			return nil
 		}
-		return "", time.Time{}, nil, fmt.Errorf("read auth record for recovery: %w", err)
+		return fmt.Errorf("read auth record for password reset: %w", err)
 	}
+	return s.issueEmailCode(ctx, record.UserID, record.Email,
+		domain.EmailCodePurposePasswordReset,
+		"Reset your PMV2 master password",
+		"We received a request to reset your master password.")
+}
 
-	recoveryRecord, err := s.repo.GetRecoveryRecord(ctx, record.UserID)
+// VerifyPasswordResetCode validates an emailed reset code and, on success,
+// issues a short-lived reset token used to set the new password.
+func (s *AuthService) VerifyPasswordResetCode(ctx context.Context, email, code string) (string, time.Time, error) {
+	normalizedEmail := util.NormalizeEmail(email)
+	if normalizedEmail == "" {
+		return "", time.Time{}, domain.ErrInvalidVerificationCode
+	}
+	record, err := s.repo.GetUserAuthByEmail(ctx, normalizedEmail)
 	if err != nil {
 		if errors.Is(err, domain.ErrNotFound) {
-			return "", time.Time{}, nil, domain.ErrRecoveryNotSetup
+			return "", time.Time{}, domain.ErrInvalidVerificationCode
 		}
-		return "", time.Time{}, nil, fmt.Errorf("read recovery record: %w", err)
-	}
-
-	if !recoveryRecord.RecoveryEnabled {
-		return "", time.Time{}, nil, domain.ErrRecoveryNotSetup
+		return "", time.Time{}, fmt.Errorf("read auth record for reset verify: %w", err)
 	}
 
 	nowUTC := s.now().UTC()
-	if recoveryRecord.LastRecoveryAt != nil && nowUTC.Sub(*recoveryRecord.LastRecoveryAt) < recoveryCooldown {
-		return "", time.Time{}, nil, domain.ErrRecoveryCooldown
-	}
-
-	keyHash := util.HashRecoveryKey(recoveryKey, s.pepper)
-	if subtle.ConstantTimeCompare(keyHash, recoveryRecord.RecoveryKeyHash) != 1 {
-		return "", time.Time{}, nil, domain.ErrInvalidRecoveryKey
-	}
-
-	if record.TOTPEnabled {
-		if s.isMFALocked(record.TOTPLockedUntil, nowUTC) {
-			return "", time.Time{}, nil, domain.ErrMFARateLimited
-		}
-
-		trimmedCode := util.TrimOrEmpty(totpCode)
-		if trimmedCode == "" {
-			return "", time.Time{}, nil, domain.ErrMFARequired
-		}
-
-		secret, err := util.ParseStoredTOTPSecret(record.TOTPSecretEnc, s.totpSecretKey)
-		if err != nil {
-			return "", time.Time{}, nil, fmt.Errorf("decode totp secret for recovery: %w", err)
-		}
-		if !util.VerifyTOTP(secret, trimmedCode, nowUTC) {
-			return "", time.Time{}, nil, s.recordMFAFailure(ctx, record.UserID, nowUTC)
-		}
-		if err := s.repo.ResetTOTPFailures(ctx, record.UserID); err != nil {
-			return "", time.Time{}, nil, fmt.Errorf("reset totp failures after recovery verify: %w", err)
-		}
-	}
-
-	recoveryToken, err := util.NewOpaqueToken(32)
+	ok, err := s.consumeEmailCode(ctx, record.UserID, domain.EmailCodePurposePasswordReset, code, nowUTC)
 	if err != nil {
-		return "", time.Time{}, nil, err
+		return "", time.Time{}, err
+	}
+	if !ok {
+		return "", time.Time{}, domain.ErrInvalidVerificationCode
 	}
 
+	resetToken, err := util.NewOpaqueToken(32)
+	if err != nil {
+		return "", time.Time{}, err
+	}
 	sessionID, err := util.NewUUID()
 	if err != nil {
-		return "", time.Time{}, nil, err
+		return "", time.Time{}, err
 	}
-
 	expiresAt := nowUTC.Add(recoveryTokenTTL)
-	err = s.repo.CreateSession(ctx, domain.CreateSessionInput{
+	if err := s.repo.CreateSession(ctx, domain.CreateSessionInput{
 		SessionID:  sessionID,
 		UserID:     record.UserID,
-		TokenHash:  util.HashToken(recoveryToken, s.pepper),
-		DeviceName: "recovery",
+		TokenHash:  util.HashToken(resetToken, s.pepper),
+		DeviceName: "password-reset",
 		ExpiresAt:  expiresAt,
-	})
-	if err != nil {
-		return "", time.Time{}, nil, fmt.Errorf("create recovery session: %w", err)
+	}); err != nil {
+		return "", time.Time{}, fmt.Errorf("create reset token session: %w", err)
 	}
-
-	return recoveryToken, expiresAt, &recoveryRecord, nil
+	return resetToken, expiresAt, nil
 }
 
-func (s *AuthService) ResetPassword(ctx context.Context, recoveryToken string, newPassword string, deviceName string, ipAddr string, userAgent string) (domain.LoginOutput, error) {
-	if util.TrimOrEmpty(recoveryToken) == "" {
+// ResetPasswordViaEmail sets a new master password using a reset token, then
+// wipes the now-undecryptable vault (zero-knowledge: the server can't re-encrypt
+// it) and starts the user with a clean session.
+func (s *AuthService) ResetPasswordViaEmail(ctx context.Context, resetToken, newVerifier, deviceName, ipAddr, userAgent string) (domain.LoginOutput, error) {
+	if util.TrimOrEmpty(resetToken) == "" {
 		return domain.LoginOutput{}, domain.ErrInvalidRecoveryToken
 	}
-
-	session, err := s.repo.GetActiveSessionByTokenHash(ctx, util.HashToken(recoveryToken, s.pepper))
+	session, err := s.repo.GetActiveSessionByTokenHash(ctx, util.HashToken(resetToken, s.pepper))
 	if err != nil {
 		if errors.Is(err, domain.ErrNotFound) {
 			return domain.LoginOutput{}, domain.ErrInvalidRecoveryToken
 		}
-		return domain.LoginOutput{}, fmt.Errorf("validate recovery token: %w", err)
+		return domain.LoginOutput{}, fmt.Errorf("validate reset token: %w", err)
 	}
 
-	if err := util.ValidatePasswordStrength(newPassword); err != nil {
+	if err := util.ValidateAuthVerifier(newVerifier); err != nil {
 		return domain.LoginOutput{}, err
 	}
 
-	params := util.DefaultArgon2Params()
-	paramsJSON, err := util.MarshalArgon2Params(params)
+	paramsJSON, err := util.MarshalArgon2Params(util.DefaultArgon2Params())
 	if err != nil {
 		return domain.LoginOutput{}, fmt.Errorf("marshal argon2 params: %w", err)
 	}
-
-	salt, passwordHash, err := util.HashPassword(newPassword, params)
+	salt, err := util.NewRandomSalt(32)
 	if err != nil {
 		return domain.LoginOutput{}, err
 	}
-
-	err = s.repo.UpdatePassword(ctx, domain.ResetPasswordInput{
+	if err := s.repo.UpdatePassword(ctx, domain.ResetPasswordInput{
 		UserID:       session.UserID,
-		Algo:         "argon2id",
+		Algo:         "client-argon2id-sha256",
 		ParamsJSON:   paramsJSON,
 		Salt:         salt,
-		PasswordHash: passwordHash,
-	})
-	if err != nil {
+		PasswordHash: util.HashAuthVerifier(newVerifier, s.pepper),
+	}); err != nil {
 		return domain.LoginOutput{}, fmt.Errorf("update password: %w", err)
 	}
 
+	// The old vault was encrypted under the forgotten password and can no longer
+	// be decrypted; wipe it so the user starts fresh.
+	if err := s.repo.WipeUserVault(ctx, session.UserID); err != nil {
+		return domain.LoginOutput{}, fmt.Errorf("wipe vault after reset: %w", err)
+	}
+
 	if _, err := s.repo.RevokeAllUserSessions(ctx, session.UserID); err != nil {
-		return domain.LoginOutput{}, fmt.Errorf("revoke sessions after recovery: %w", err)
+		return domain.LoginOutput{}, fmt.Errorf("revoke sessions after reset: %w", err)
 	}
 
-	if err := s.repo.UpdateLastRecoveryAt(ctx, session.UserID); err != nil {
-		return domain.LoginOutput{}, fmt.Errorf("update last recovery timestamp: %w", err)
-	}
-
-	// Fetch full user record to populate session details
 	record, err := s.repo.GetUserAuthByEmail(ctx, session.Email)
 	if err != nil {
-		return domain.LoginOutput{}, fmt.Errorf("read auth record for reset session: %w", err)
+		return domain.LoginOutput{}, fmt.Errorf("read auth record after reset: %w", err)
 	}
 
-	// Create a new session so the user remains logged in immediately
 	sessionToken, err := util.NewOpaqueToken(32)
 	if err != nil {
 		return domain.LoginOutput{}, err
 	}
-
 	newSessionID, err := util.NewUUID()
 	if err != nil {
 		return domain.LoginOutput{}, err
 	}
-
 	expiresAt := s.now().UTC().Add(s.sessionTTL)
-	err = s.repo.CreateSession(ctx, domain.CreateSessionInput{
+	if err := s.repo.CreateSession(ctx, domain.CreateSessionInput{
 		SessionID:  newSessionID,
 		UserID:     record.UserID,
 		TokenHash:  util.HashToken(sessionToken, s.pepper),
@@ -579,10 +622,14 @@ func (s *AuthService) ResetPassword(ctx context.Context, recoveryToken string, n
 		IPAddr:     util.NormalizeIP(ipAddr),
 		UserAgent:  util.TrimOrEmpty(userAgent),
 		ExpiresAt:  expiresAt,
-	})
-	if err != nil {
+	}); err != nil {
 		return domain.LoginOutput{}, fmt.Errorf("create session after reset: %w", err)
 	}
+
+	uid, _ := uuid.Parse(record.UserID)
+	s.audit.LogEvent(ctx, &uid, domain.EventTypeAuthLoginSuccess, map[string]string{
+		"reason": "password_reset_via_email",
+	})
 
 	return domain.LoginOutput{
 		SessionToken: sessionToken,
@@ -594,17 +641,32 @@ func (s *AuthService) ResetPassword(ctx context.Context, recoveryToken string, n
 	}, nil
 }
 
-func (s *AuthService) UpdateProfile(ctx context.Context, userID string, name string) error {
-	trimmedName := util.TrimOrEmpty(name)
-	
-	if err := s.repo.UpdateDisplayName(ctx, userID, trimmedName); err != nil {
-		return fmt.Errorf("update profile: %w", err)
+// RequestMFAEmailCode emails an MFA-recovery code when the supplied password is
+// correct and the account has TOTP enabled. Always returns nil to avoid leaking
+// account state.
+func (s *AuthService) RequestMFAEmailCode(ctx context.Context, email, passwordVerifier string) error {
+	normalizedEmail := util.NormalizeEmail(email)
+	if normalizedEmail == "" {
+		return nil
+	}
+	record, err := s.repo.GetUserAuthByEmail(ctx, normalizedEmail)
+	if err != nil {
+		if errors.Is(err, domain.ErrNotFound) {
+			return nil
+		}
+		return fmt.Errorf("read auth record for mfa email: %w", err)
 	}
 
-	uid, _ := uuid.Parse(userID)
-	s.audit.LogEvent(ctx, &uid, domain.EventTypeAuthProfileUpdated, map[string]string{
-		"updated_fields": "name",
-	})
-	
-	return nil
+	// Only send a code to someone who proved knowledge of the password and who
+	// actually has TOTP enabled.
+	if subtle.ConstantTimeCompare(util.HashAuthVerifier(passwordVerifier, s.pepper), record.PasswordHash) != 1 {
+		return nil
+	}
+	if !record.TOTPEnabled {
+		return nil
+	}
+	return s.issueEmailCode(ctx, record.UserID, record.Email,
+		domain.EmailCodePurposeMFARecovery,
+		"Your PMV2 sign-in code",
+		"Use this code to sign in without your authenticator app.")
 }

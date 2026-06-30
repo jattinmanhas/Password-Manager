@@ -14,6 +14,7 @@ import { getErrorMessage } from "../../../lib/error-codes";
 import {
   decryptVaultItem,
   encryptVaultItem,
+  unwrapVaultItemDek,
   fromBase64,
   toBase64,
   utf8ToBytes,
@@ -284,8 +285,25 @@ export function useVaultItems({ ensureVerifiedWriteAccess }: UseVaultItemsOption
 
       setSaving(true);
       setError("");
+      let reuseDek: Uint8Array | null = null;
       try {
-        const payload = encryptVaultItem({ plaintext: JSON.stringify(data), kek, aead });
+        // On edit, reuse the item's existing DEK so any active shares of this
+        // item (which wrap the same DEK to recipients' keys) stay valid. A
+        // fresh DEK would silently break decryption for shared recipients.
+        if (editingItemId) {
+          const existing = await vaultService.getItem(editingItemId);
+          reuseDek = unwrapVaultItemDek({
+            payload: { wrappedDek: existing.wrapped_dek, wrapNonce: existing.wrap_nonce },
+            kek,
+            aead,
+          });
+        }
+        const payload = encryptVaultItem({
+          plaintext: JSON.stringify(data),
+          kek,
+          aead,
+          ...(reuseDek ? { dek: reuseDek } : {}),
+        });
         const request = {
           folder_id: itemFolderId,
           ciphertext: payload.ciphertext,
@@ -309,6 +327,7 @@ export function useVaultItems({ ensureVerifiedWriteAccess }: UseVaultItemsOption
       } catch (err) {
         setError(getErrorMessage(err, "Failed to save vault item"));
       } finally {
+        if (reuseDek) reuseDek.fill(0);
         setSaving(false);
       }
     },

@@ -63,6 +63,72 @@ func ParseArgon2Params(raw []byte) (domain.Argon2Params, error) {
 	return params, nil
 }
 
+// AuthVerifierLengthHex is the expected length of the client-derived
+// authentication verifier: a 32-byte Argon2id output, hex-encoded.
+const AuthVerifierLengthHex = 64
+
+// ValidateAuthVerifier ensures the value received from the client is a
+// well-formed authentication verifier (64 lowercase/uppercase hex chars =
+// 32 bytes). The server never sees the master password; it only ever
+// receives this verifier, so password-strength rules are enforced
+// client-side and the server only validates the shape.
+func ValidateAuthVerifier(verifier string) error {
+	trimmed := strings.TrimSpace(verifier)
+	if len(trimmed) != AuthVerifierLengthHex {
+		return domain.ErrInvalidAuthVerifier
+	}
+	if _, err := hex.DecodeString(trimmed); err != nil {
+		return domain.ErrInvalidAuthVerifier
+	}
+	return nil
+}
+
+// HashAuthVerifier computes the server-side credential record from the
+// client-derived verifier. The verifier is already the output of an
+// expensive Argon2id over the master password, so a fast keyed SHA-256 is
+// sufficient here: recovering the master password from a leaked record
+// still requires brute-forcing through the client-side Argon2id. The pepper
+// is a server-held secret that is never stored in the database.
+func HashAuthVerifier(verifier string, pepper string) []byte {
+	sum := sha256.Sum256([]byte("pmv2:auth-verifier:" + pepper + ":" + strings.TrimSpace(verifier)))
+	return sum[:]
+}
+
+// NewRandomSalt returns n cryptographically-random bytes. Used as the
+// per-user vault KDF salt persisted in auth_credentials.salt.
+func NewRandomSalt(n int) ([]byte, error) {
+	salt := make([]byte, n)
+	if _, err := rand.Read(salt); err != nil {
+		return nil, fmt.Errorf("generate salt: %w", err)
+	}
+	return salt, nil
+}
+
+// NewNumericCode returns a zero-padded random decimal code of the given length
+// (e.g. a 6-digit email verification code). Uses crypto/rand for uniform digits.
+func NewNumericCode(digits int) (string, error) {
+	if digits <= 0 {
+		return "", errors.New("digit count must be positive")
+	}
+	buf := make([]byte, digits)
+	if _, err := rand.Read(buf); err != nil {
+		return "", fmt.Errorf("generate numeric code: %w", err)
+	}
+	out := make([]byte, digits)
+	for i, b := range buf {
+		out[i] = '0' + (b % 10)
+	}
+	return string(out), nil
+}
+
+// HashEmailCode derives the stored hash for an email verification code. The
+// code is short-lived and rate-limited, and the pepper is a server secret, so a
+// keyed SHA-256 is sufficient here.
+func HashEmailCode(code string, pepper string) []byte {
+	sum := sha256.Sum256([]byte("pmv2:email-code:" + pepper + ":" + strings.TrimSpace(code)))
+	return sum[:]
+}
+
 func NewOpaqueToken(size int) (string, error) {
 	buf := make([]byte, size)
 	if _, err := rand.Read(buf); err != nil {

@@ -3,8 +3,10 @@ import { Link, useNavigate } from "react-router-dom";
 import { Eye, EyeOff } from "lucide-react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
+import { toast } from "react-hot-toast";
 import { useAuth } from "../../../app/providers/AuthProvider";
-import { ApiError } from "../services/auth.service";
+import { authService, ApiError } from "../services/auth.service";
+import { deriveAuthVerifier } from "../../../crypto/auth";
 import { loginSchema, type LoginFormData, totpSetupSchema } from "../../../lib/validations/auth";
 import { z } from "zod";
 import { Button } from "../../../components/ui/Button";
@@ -24,13 +26,12 @@ export function Login() {
 
     const [showPassword, setShowPassword] = useState(false);
     const [mfaStep, setMfaStep] = useState(false);
-    const [mfaType, setMfaType] = useState<"totp" | "recovery">("totp");
-    
-    // Quick resolver for MFA depending on type
+    const [mfaType, setMfaType] = useState<"totp" | "email">("totp");
+    const [requestingEmail, setRequestingEmail] = useState(false);
+
+    // Both the authenticator and emailed codes are 6 numeric digits.
     const mfaSchema = z.object({
-        code: mfaType === "totp" 
-            ? z.string().length(6, "Code must be 6 digits").regex(/^\d+$/, "Code must be numeric")
-            : z.string().min(1, "Recovery code is required")
+        code: z.string().length(6, "Code must be 6 digits").regex(/^\d+$/, "Code must be numeric"),
     });
 
     const mfaForm = useForm<{ code: string }>({
@@ -69,13 +70,32 @@ export function Login() {
                 email: loginData.email,
                 password: loginData.password,
                 device_name: guessDeviceName(),
-                [mfaType === "totp" ? "totp_code" : "recovery_code"]: data.code,
+                [mfaType === "totp" ? "totp_code" : "email_code"]: data.code,
             });
             navigate("/", { replace: true });
         } catch (err) {
             handleLoginError(err);
         } finally {
             setLoading(false);
+        }
+    };
+
+    // Lost authenticator: email the user a one-time sign-in code. Requires the
+    // password (sent as the derived verifier) so only the account owner can ask.
+    const requestEmailCode = async () => {
+        setApiError("");
+        setRequestingEmail(true);
+        try {
+            const { email, password } = loginForm.getValues();
+            const verifier = await deriveAuthVerifier(email, password);
+            await authService.requestMfaEmailCode({ email, password: verifier });
+            setMfaType("email");
+            mfaForm.reset();
+            toast.success("If your account has 2FA, a code is on its way to your email.");
+        } catch (err) {
+            setApiError(err instanceof Error ? err.message : "Failed to send email code");
+        } finally {
+            setRequestingEmail(false);
         }
     };
 
@@ -97,7 +117,7 @@ export function Login() {
                 <div style={{ textAlign: "center", marginBottom: "1.5rem" }}>
                     <h2 className="card-title">Two-Step Verification</h2>
                     <p className="card-desc" style={{ marginBottom: 0 }}>
-                        Enter the {mfaType === "totp" ? "6-digit code from your authenticator app" : "recovery code"} to continue.
+                        Enter the 6-digit code from your {mfaType === "totp" ? "authenticator app" : "email"} to continue.
                     </p>
                 </div>
 
@@ -105,14 +125,15 @@ export function Login() {
 
                 <form onSubmit={mfaForm.handleSubmit(onMfaSubmit)} className="form-stack">
                     <div className="form-group">
-                        <Label htmlFor="code">{mfaType === "totp" ? "Authentication Code" : "Recovery Code"}</Label>
+                        <Label htmlFor="code">{mfaType === "totp" ? "Authentication Code" : "Email Code"}</Label>
                         <Input
                             id="code"
                             type="text"
+                            inputMode="numeric"
                             autoComplete="one-time-code"
                             {...mfaForm.register("code")}
                             error={mfaForm.formState.errors.code?.message || (!!apiError ? apiError : false)}
-                            placeholder={mfaType === "totp" ? "000000" : ""}
+                            placeholder="000000"
                         />
                     </div>
 
@@ -121,17 +142,28 @@ export function Login() {
                     </Button>
 
                     <div style={{ textAlign: "center", marginTop: "1rem" }}>
-                        <button
-                            type="button"
-                            style={{ fontSize: "0.875rem", fontWeight: 500, color: "var(--color-security-blue)" }}
-                            onClick={() => {
-                                setMfaType(mfaType === "totp" ? "recovery" : "totp");
-                                mfaForm.reset();
-                                setApiError("");
-                            }}
-                        >
-                            Use a {mfaType === "totp" ? "recovery code" : "authenticator app"} instead
-                        </button>
+                        {mfaType === "totp" ? (
+                            <button
+                                type="button"
+                                disabled={requestingEmail}
+                                style={{ fontSize: "0.875rem", fontWeight: 500, color: "var(--color-security-blue)" }}
+                                onClick={requestEmailCode}
+                            >
+                                {requestingEmail ? "Sending…" : "Can't use your authenticator? Email me a code"}
+                            </button>
+                        ) : (
+                            <button
+                                type="button"
+                                style={{ fontSize: "0.875rem", fontWeight: 500, color: "var(--color-security-blue)" }}
+                                onClick={() => {
+                                    setMfaType("totp");
+                                    mfaForm.reset();
+                                    setApiError("");
+                                }}
+                            >
+                                Use authenticator app instead
+                            </button>
+                        )}
                     </div>
                     <div style={{ textAlign: "center", marginTop: "0.5rem" }}>
                         <button

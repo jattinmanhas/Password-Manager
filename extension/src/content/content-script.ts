@@ -36,23 +36,54 @@ chrome.runtime.onMessage.addListener(
 
 // ── Save detection ─────────────────────────────────────────────────────────
 
+// Credentials are remembered as the user types so that a capture survives the
+// page navigation that a login submit triggers. Reading field values only at
+// submit time is unreliable: the form often navigates (or clears its fields)
+// before the message is delivered, so the save prompt never appears.
+let rememberedCredentials: { username: string; password: string } | null = null;
+
+function rememberCredentialsFromPage(): void {
+  const passwordField = findBestPasswordField();
+  if (!passwordField) {
+    return;
+  }
+  const password = passwordField.value.trim();
+  if (!password) {
+    return;
+  }
+  const usernameField = findBestUsernameField(passwordField);
+  const username = usernameField?.value.trim() ?? rememberedCredentials?.username ?? "";
+  rememberedCredentials = { username, password };
+}
+
+document.addEventListener(
+  "input",
+  (event) => {
+    if (event.target instanceof HTMLInputElement) {
+      rememberCredentialsFromPage();
+    }
+  },
+  true
+);
+
+function dispatchCapture(form: HTMLFormElement | null): void {
+  // Prefer a live read of the submitted form; fall back to the credentials we
+  // remembered while the user was typing (resilient to field clearing).
+  const capture = captureSubmittedCredentials(form) ?? captureFromRemembered();
+  if (!capture) {
+    return;
+  }
+  void chrome.runtime.sendMessage({
+    type: "capture-login-submission",
+    capture,
+  });
+}
+
 document.addEventListener(
   "submit",
   (event) => {
     const form = event.target instanceof HTMLFormElement ? event.target : null;
-    if (!form) {
-      return;
-    }
-
-    const capture = captureSubmittedCredentials(form);
-    if (!capture) {
-      return;
-    }
-
-    void chrome.runtime.sendMessage({
-      type: "capture-login-submission",
-      capture,
-    });
+    dispatchCapture(form);
   },
   true
 );
@@ -60,7 +91,24 @@ document.addEventListener(
 // ── Form Detection ─────────────────────────────────────────────────────────
 
 function getVisibleInputs(root: ParentNode = document): HTMLInputElement[] {
-  return Array.from(root.querySelectorAll<HTMLInputElement>("input")).filter(isEditableVisibleInput);
+  return collectInputsDeep(root).filter(isEditableVisibleInput);
+}
+
+// Collects <input> elements including those nested inside open shadow roots,
+// which a plain querySelectorAll("input") cannot reach. Many modern sites build
+// login forms as web components, so without this the password/username fields
+// are invisible to detection and autofill silently does nothing.
+function collectInputsDeep(root: ParentNode): HTMLInputElement[] {
+  const inputs: HTMLInputElement[] = [];
+  for (const el of root.querySelectorAll<HTMLElement>("*")) {
+    if (el instanceof HTMLInputElement) {
+      inputs.push(el);
+    }
+    if (el.shadowRoot) {
+      inputs.push(...collectInputsDeep(el.shadowRoot));
+    }
+  }
+  return inputs;
 }
 
 function isEditableVisibleInput(input: HTMLInputElement): boolean {
@@ -277,7 +325,11 @@ function fillCredentials(username: string, password: string): FillCredentialsRes
 
 // ── Save Capture Helpers ───────────────────────────────────────────────────
 
-function captureSubmittedCredentials(form: HTMLFormElement): PendingLoginCapture | null {
+function captureSubmittedCredentials(form: HTMLFormElement | null): PendingLoginCapture | null {
+  if (!form) {
+    return null;
+  }
+
   const passwordField = Array.from(form.querySelectorAll<HTMLInputElement>('input[type="password"]'))
     .filter(isEditableVisibleInput)
     .map((input) => ({ input, score: scorePasswordField(input) }))
@@ -289,9 +341,17 @@ function captureSubmittedCredentials(form: HTMLFormElement): PendingLoginCapture
   }
 
   const usernameField = findBestUsernameField(passwordField, [form]);
-  const password = passwordField.value.trim();
-  const username = usernameField?.value.trim() ?? "";
+  return makeCapture(usernameField?.value.trim() ?? "", passwordField.value.trim());
+}
 
+function captureFromRemembered(): PendingLoginCapture | null {
+  if (!rememberedCredentials) {
+    return null;
+  }
+  return makeCapture(rememberedCredentials.username, rememberedCredentials.password);
+}
+
+function makeCapture(username: string, password: string): PendingLoginCapture | null {
   if (!username || !password) {
     return null;
   }
@@ -324,22 +384,10 @@ document.addEventListener(
       return;
     }
 
-    const form = button.closest("form");
-    if (!form) {
-      return;
-    }
-
-    window.setTimeout(() => {
-      const capture = captureSubmittedCredentials(form);
-      if (!capture) {
-        return;
-      }
-
-      void chrome.runtime.sendMessage({
-        type: "capture-login-submission",
-        capture,
-      });
-    }, 0);
+    // Snapshot the current field values synchronously, before any handler clears
+    // the form or starts navigating. dispatchCapture falls back to this snapshot.
+    rememberCredentialsFromPage();
+    dispatchCapture(button.closest("form"));
   },
   true
 );

@@ -22,6 +22,19 @@ type Config struct {
 	FrontendOrigin    string
 	SessionCookieName string
 
+	// TrustedProxyCount is the number of trusted reverse proxies in front of
+	// the app. The client IP is taken as the Nth-from-rightmost entry of
+	// X-Forwarded-For, so client-supplied (spoofed) values to the left are
+	// ignored. 0 means do not trust X-Forwarded-For at all (use RemoteAddr).
+	// Set to 1 behind a single load balancer (e.g. Render).
+	TrustedProxyCount int
+
+	// Email (Resend) — used to send password-reset and MFA-recovery codes.
+	// If ResendAPIKey is empty, emails are logged instead of sent (dev mode).
+	ResendAPIKey string
+	EmailFrom    string
+	AppBaseURL   string
+
 	// KDF (Argon2id) parameters for vault key derivation.
 	// These are served to the frontend via a public API endpoint.
 	KDFMemoryKiB   int
@@ -29,12 +42,12 @@ type Config struct {
 	KDFParallelism int
 
 	// Logging
-	LogLevel       string
-	LogFormat      string // "text" or "json"
-	LogFilePath    string
-	LogMaxSizeMB   int
-	LogMaxBackups  int
-	LogMaxAgeDays  int
+	LogLevel      string
+	LogFormat     string // "text" or "json"
+	LogFilePath   string
+	LogMaxSizeMB  int
+	LogMaxBackups int
+	LogMaxAgeDays int
 }
 
 func Load() Config {
@@ -55,6 +68,11 @@ func Load() Config {
 		TOTPIssuer:        getenv("TOTP_ISSUER", "PMV2"),
 		FrontendOrigin:    getenv("CORS_ALLOWED_ORIGINS", getenv("FRONTEND_ORIGIN", "http://localhost:5173")),
 		SessionCookieName: getenv("SESSION_COOKIE_NAME", "pmv2_session"),
+		TrustedProxyCount: mustInt(getenv("TRUSTED_PROXY_COUNT", "0")),
+
+		ResendAPIKey: getenv("RESEND_API_KEY", ""),
+		EmailFrom:    getenv("EMAIL_FROM", "PMV2 <onboarding@resend.dev>"),
+		AppBaseURL:   getenv("APP_BASE_URL", "http://localhost:5173"),
 
 		// KDF defaults match the crypto spec: 64MB, 3 iterations, parallelism 2.
 		KDFMemoryKiB:   mustInt(getenv("KDF_MEMORY_KIB", "65536")),

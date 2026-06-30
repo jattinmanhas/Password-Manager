@@ -6,13 +6,13 @@ import {
     SessionResponse,
     TOTPSetupResponse,
     TOTPEnableResponse,
-    RecoverySetupRequest,
-    RecoverySetupResponse,
-    RecoveryVerifyRequest,
-    RecoveryVerifyResponse,
-    RecoveryResetRequest,
-    RecoveryResetResponse,
-    RecoveryStatusResponse,
+    PasswordResetRequestRequest,
+    PasswordResetVerifyRequest,
+    PasswordResetVerifyResponse,
+    PasswordResetConfirmRequest,
+    PasswordResetConfirmResponse,
+    MFAEmailCodeRequest,
+    StatusResponse,
 } from "../types";
 
 import { request, ApiError } from "../../../lib/api";
@@ -44,19 +44,23 @@ export const authService = {
     disableTOTP() {
         return request<void>("POST", "/auth/totp/disable");
     },
-    getRecoveryStatus() {
-        return request<RecoveryStatusResponse>("GET", "/auth/recovery/status");
-    },
-    setupRecovery(req: RecoverySetupRequest) {
-        return request<RecoverySetupResponse>("POST", "/auth/recovery/setup", req);
-    },
-    verifyRecovery(req: RecoveryVerifyRequest) {
-        return request<RecoveryVerifyResponse>("POST", "/auth/recovery/verify", req);
-    },
-    resetPassword(req: RecoveryResetRequest) {
-        return request<RecoveryResetResponse>("POST", "/auth/recovery/reset", req);
-    },
     updateProfile(name: string) {
         return request<void>("PUT", "/auth/profile", { name });
+    },
+
+    // Email-based master-password reset.
+    requestPasswordReset(req: PasswordResetRequestRequest) {
+        return request<StatusResponse>("POST", "/auth/password-reset/request", req);
+    },
+    verifyPasswordReset(req: PasswordResetVerifyRequest) {
+        return request<PasswordResetVerifyResponse>("POST", "/auth/password-reset/verify", req);
+    },
+    confirmPasswordReset(req: PasswordResetConfirmRequest) {
+        return request<PasswordResetConfirmResponse>("POST", "/auth/password-reset/confirm", req);
+    },
+
+    // Email-based MFA recovery (lost authenticator).
+    requestMfaEmailCode(req: MFAEmailCodeRequest) {
+        return request<StatusResponse>("POST", "/auth/mfa/email/request", req);
     },
 };

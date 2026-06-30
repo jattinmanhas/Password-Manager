@@ -21,8 +21,6 @@ type mockAuthRepo struct {
 	getTOTPStateFn          func(ctx context.Context, userID string) (domain.TOTPState, error)
 	recordTOTPFailureFn     func(ctx context.Context, userID string, now time.Time, maxAttempts int, window time.Duration, lockDuration time.Duration) (*time.Time, error)
 	resetTOTPFailuresFn     func(ctx context.Context, userID string) error
-	replaceRecoveryCodesFn  func(ctx context.Context, userID string, codeHashes [][]byte) error
-	consumeRecoveryCodeFn   func(ctx context.Context, userID string, codeHash []byte) (bool, error)
 	deleteExpiredSessionsFn func(ctx context.Context) (int64, error)
 }
 
@@ -102,20 +100,6 @@ func (m *mockAuthRepo) ResetTOTPFailures(ctx context.Context, userID string) err
 	return nil
 }
 
-func (m *mockAuthRepo) ReplaceRecoveryCodes(ctx context.Context, userID string, codeHashes [][]byte) error {
-	if m.replaceRecoveryCodesFn != nil {
-		return m.replaceRecoveryCodesFn(ctx, userID, codeHashes)
-	}
-	return nil
-}
-
-func (m *mockAuthRepo) ConsumeRecoveryCode(ctx context.Context, userID string, codeHash []byte) (bool, error) {
-	if m.consumeRecoveryCodeFn != nil {
-		return m.consumeRecoveryCodeFn(ctx, userID, codeHash)
-	}
-	return false, nil
-}
-
 func (m *mockAuthRepo) DeleteExpiredSessions(ctx context.Context) (int64, error) {
 	if m.deleteExpiredSessionsFn != nil {
 		return m.deleteExpiredSessionsFn(ctx)
@@ -127,18 +111,6 @@ func (m *mockAuthRepo) RevokeAllUserSessions(ctx context.Context, userID string)
 	return 0, nil
 }
 
-func (m *mockAuthRepo) SetupRecovery(ctx context.Context, input domain.SetupRecoveryInput) error {
-	return nil
-}
-
-func (m *mockAuthRepo) GetRecoveryRecord(ctx context.Context, userID string) (domain.RecoveryRecord, error) {
-	return domain.RecoveryRecord{}, domain.ErrNotFound
-}
-
-func (m *mockAuthRepo) UpdateLastRecoveryAt(ctx context.Context, userID string) error {
-	return nil
-}
-
 func (m *mockAuthRepo) UpdatePassword(ctx context.Context, input domain.ResetPasswordInput) error {
 	return nil
 }
@@ -147,9 +119,30 @@ func (m *mockAuthRepo) UpdateDisplayName(ctx context.Context, userID string, nam
 	return nil
 }
 
-func newTestAuthService(repo *mockAuthRepo) *service.AuthService {
-	return service.NewAuthService(repo, nil, "pepper123", time.Hour, "Test Issuer")
+func (m *mockAuthRepo) CreateEmailVerificationCode(ctx context.Context, input domain.EmailVerificationCodeInput) error {
+	return nil
 }
+func (m *mockAuthRepo) GetLatestEmailVerificationCode(ctx context.Context, userID string, purpose string) (domain.EmailVerificationCode, error) {
+	return domain.EmailVerificationCode{}, domain.ErrNotFound
+}
+func (m *mockAuthRepo) MarkEmailVerificationCodeConsumed(ctx context.Context, id string) error {
+	return nil
+}
+func (m *mockAuthRepo) IncrementEmailVerificationAttempts(ctx context.Context, id string) error {
+	return nil
+}
+func (m *mockAuthRepo) InvalidateEmailVerificationCodes(ctx context.Context, userID string, purpose string) error {
+	return nil
+}
+func (m *mockAuthRepo) WipeUserVault(ctx context.Context, userID string) error { return nil }
+
+func newTestAuthService(repo *mockAuthRepo) *service.AuthService {
+	return service.NewAuthService(repo, nil, nil, "pepper123", time.Hour, "Test Issuer", "http://localhost:5173")
+}
+
+// validVerifier is a well-formed client-derived auth verifier (32-byte
+// Argon2id output, hex-encoded) as the new register/login contract expects.
+const validVerifier = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
 
 func TestRegister_Success(t *testing.T) {
 	repo := &mockAuthRepo{}
@@ -166,7 +159,7 @@ func TestRegister_Success(t *testing.T) {
 	}
 
 	svc := newTestAuthService(repo)
-	resp, err := svc.Register(context.Background(), "test@example.com", "Password123!", "Test User")
+	resp, err := svc.Register(context.Background(), "test@example.com", validVerifier, "Test User")
 	if err != nil {
 		t.Fatalf("Register failed: %v", err)
 	}
@@ -188,7 +181,7 @@ func TestRegister_EmailTaken(t *testing.T) {
 	}
 
 	svc := newTestAuthService(repo)
-	_, err := svc.Register(context.Background(), "test@example.com", "Password123!", "Test User")
+	_, err := svc.Register(context.Background(), "test@example.com", validVerifier, "Test User")
 	if err != domain.ErrEmailTaken {
 		t.Errorf("expected ErrEmailTaken, got %v", err)
 	}
@@ -218,6 +211,9 @@ func TestLogin_FailNotFound(t *testing.T) {
 
 func TestLogout(t *testing.T) {
 	repo := &mockAuthRepo{
+		getActiveSessionFn: func(ctx context.Context, tokenHash []byte) (domain.Session, error) {
+			return domain.Session{UserID: "123", Email: "test@example.com"}, nil
+		},
 		revokeSessionFn: func(ctx context.Context, tokenHash []byte) (bool, error) {
 			return true, nil
 		},

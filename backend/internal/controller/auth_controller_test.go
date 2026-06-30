@@ -27,8 +27,6 @@ type mockAuthRepo struct {
 	getTOTPStateFn          func(ctx context.Context, userID string) (domain.TOTPState, error)
 	recordTOTPFailureFn     func(ctx context.Context, userID string, now time.Time, maxAttempts int, window time.Duration, lockDuration time.Duration) (*time.Time, error)
 	resetTOTPFailuresFn     func(ctx context.Context, userID string) error
-	replaceRecoveryCodesFn  func(ctx context.Context, userID string, codeHashes [][]byte) error
-	consumeRecoveryCodeFn   func(ctx context.Context, userID string, codeHash []byte) (bool, error)
 	deleteExpiredSessionsFn func(ctx context.Context) (int64, error)
 }
 
@@ -98,18 +96,6 @@ func (m *mockAuthRepo) ResetTOTPFailures(ctx context.Context, userID string) err
 	}
 	return nil
 }
-func (m *mockAuthRepo) ReplaceRecoveryCodes(ctx context.Context, userID string, codeHashes [][]byte) error {
-	if m.replaceRecoveryCodesFn != nil {
-		return m.replaceRecoveryCodesFn(ctx, userID, codeHashes)
-	}
-	return nil
-}
-func (m *mockAuthRepo) ConsumeRecoveryCode(ctx context.Context, userID string, codeHash []byte) (bool, error) {
-	if m.consumeRecoveryCodeFn != nil {
-		return m.consumeRecoveryCodeFn(ctx, userID, codeHash)
-	}
-	return false, nil
-}
 func (m *mockAuthRepo) DeleteExpiredSessions(ctx context.Context) (int64, error) {
 	if m.deleteExpiredSessionsFn != nil {
 		return m.deleteExpiredSessionsFn(ctx)
@@ -121,18 +107,6 @@ func (m *mockAuthRepo) RevokeAllUserSessions(ctx context.Context, userID string)
 	return 0, nil
 }
 
-func (m *mockAuthRepo) SetupRecovery(ctx context.Context, input domain.SetupRecoveryInput) error {
-	return nil
-}
-
-func (m *mockAuthRepo) GetRecoveryRecord(ctx context.Context, userID string) (domain.RecoveryRecord, error) {
-	return domain.RecoveryRecord{}, domain.ErrNotFound
-}
-
-func (m *mockAuthRepo) UpdateLastRecoveryAt(ctx context.Context, userID string) error {
-	return nil
-}
-
 func (m *mockAuthRepo) UpdatePassword(ctx context.Context, input domain.ResetPasswordInput) error {
 	return nil
 }
@@ -141,8 +115,25 @@ func (m *mockAuthRepo) UpdateDisplayName(ctx context.Context, userID string, nam
 	return nil
 }
 
+func (m *mockAuthRepo) CreateEmailVerificationCode(ctx context.Context, input domain.EmailVerificationCodeInput) error {
+	return nil
+}
+func (m *mockAuthRepo) GetLatestEmailVerificationCode(ctx context.Context, userID string, purpose string) (domain.EmailVerificationCode, error) {
+	return domain.EmailVerificationCode{}, domain.ErrNotFound
+}
+func (m *mockAuthRepo) MarkEmailVerificationCodeConsumed(ctx context.Context, id string) error {
+	return nil
+}
+func (m *mockAuthRepo) IncrementEmailVerificationAttempts(ctx context.Context, id string) error {
+	return nil
+}
+func (m *mockAuthRepo) InvalidateEmailVerificationCodes(ctx context.Context, userID string, purpose string) error {
+	return nil
+}
+func (m *mockAuthRepo) WipeUserVault(ctx context.Context, userID string) error { return nil }
+
 func setupController(repo *mockAuthRepo) *controller.AuthController {
-	svc := service.NewAuthService(repo, nil, "pepper-test", time.Hour, "issuer")
+	svc := service.NewAuthService(repo, nil, nil, "pepper-test", time.Hour, "issuer", "http://localhost:5173")
 	return controller.NewAuthController(svc, controller.AuthCookieConfig{
 		Name:   "pmv2_session",
 		Secure: false,
@@ -159,7 +150,7 @@ func TestHandleRegister_Success(t *testing.T) {
 
 	body := map[string]string{
 		"email":    "test@example.com",
-		"password": "Password123!",
+		"password": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
 		"name":     "Test",
 	}
 	b, _ := json.Marshal(body)
@@ -192,7 +183,7 @@ func TestHandleRegister_EmailTaken(t *testing.T) {
 
 	body := map[string]string{
 		"email":    "test@example.com",
-		"password": "Password123!",
+		"password": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
 		"name":     "Test",
 	}
 	b, _ := json.Marshal(body)

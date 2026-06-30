@@ -5,7 +5,6 @@ import { auditService, AuditEvent } from '../services/audit.service';
 import { DashboardStats } from '../components/DashboardStats';
 import { QuickActions } from '../components/QuickActions';
 import { RecentActivity } from '../components/RecentActivity';
-import { authService } from '../../auth/services/auth.service';
 import { sharingService } from '../../vault/services/sharing.service';
 import { calculateSecurityHealth } from '../dashboard.utils';
 import { Shield, LayoutDashboard } from 'lucide-react';
@@ -18,7 +17,6 @@ export function Dashboard() {
   const navigate = useNavigate();
   const [events, setEvents] = useState<AuditEvent[]>([]);
   const [isEventsLoading, setIsEventsLoading] = useState(true);
-  const [recoveryEnabled, setRecoveryEnabled] = useState(false);
   const [sharedExposureCount, setSharedExposureCount] = useState(0);
 
   useEffect(() => {
@@ -36,22 +34,6 @@ export function Dashboard() {
 
     fetchEvents();
   }, []);
-
-  useEffect(() => {
-    if (!session) return;
-
-    const fetchRecoveryStatus = async () => {
-      try {
-        const response = await authService.getRecoveryStatus();
-        setRecoveryEnabled(response.is_enabled);
-      } catch (err) {
-        console.error('Failed to fetch recovery status:', err);
-        setRecoveryEnabled(false);
-      }
-    };
-
-    void fetchRecoveryStatus();
-  }, [session]);
 
   useEffect(() => {
     if (!session) return;
@@ -84,10 +66,11 @@ export function Dashboard() {
             is_totp_enabled: session.isTotpEnabled,
           }
         : null,
-      recoveryEnabled,
+      // Email-based recovery is available to every account.
+      recoveryEnabled: true,
       sharedExposureCount,
     });
-  }, [items, events, session, recoveryEnabled, sharedExposureCount]);
+  }, [items, events, session, sharedExposureCount]);
 
   const getGreeting = () => {
     const hour = new Date().getHours();

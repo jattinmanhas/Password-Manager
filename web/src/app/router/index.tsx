@@ -4,7 +4,7 @@ import { DashboardLayout } from "../../components/layout/DashboardLayout";
 import { Login } from "../../features/auth/pages/Login";
 import { Register } from "../../features/auth/pages/Register";
 import { Settings } from "../../features/settings/pages/Settings";
-import { AccountRecovery } from "../../features/auth/pages/AccountRecovery";
+import { ForgotPassword } from "../../features/auth/pages/ForgotPassword";
 import { Dashboard } from "../../features/dashboard/pages/Dashboard";
 import { Vault } from "../../features/vault/pages/Vault";
 import { PasswordGeneratorPage } from "../../features/vault/pages/PasswordGeneratorPage";
@@ -105,7 +105,7 @@ const router = createBrowserRouter([
                 children: [
                     {
                         path: "/recover",
-                        element: <AccountRecovery />,
+                        element: <ForgotPassword />,
                     },
                 ],
             },

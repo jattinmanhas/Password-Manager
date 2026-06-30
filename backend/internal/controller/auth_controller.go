@@ -78,13 +78,13 @@ func (c *AuthController) HandleLogin(w http.ResponseWriter, r *http.Request) {
 	}
 
 	output, err := c.auth.Login(r.Context(), domain.LoginInput{
-		Email:        req.Email,
-		Password:     req.Password,
-		TOTPCode:     req.TOTPCode,
-		RecoveryCode: req.RecoveryCode,
-		DeviceName:   req.DeviceName,
-		IPAddr:       util.ClientIPFromRequest(r),
-		UserAgent:    r.UserAgent(),
+		Email:      req.Email,
+		Password:   req.Password,
+		TOTPCode:   req.TOTPCode,
+		EmailCode:  req.EmailCode,
+		DeviceName: req.DeviceName,
+		IPAddr:     util.ClientIPFromRequest(r),
+		UserAgent:  r.UserAgent(),
 	})
 	if err != nil {
 		switch {
@@ -100,6 +100,8 @@ func (c *AuthController) HandleLogin(w http.ResponseWriter, r *http.Request) {
 			util.WriteError(w, http.StatusBadRequest, "invalid_mfa_input", "provide either totp_code or recovery_code, not both")
 		case errors.Is(err, domain.ErrMFARateLimited):
 			util.WriteError(w, http.StatusTooManyRequests, "mfa_rate_limited", "too many invalid mfa attempts, try again later")
+		case errors.Is(err, domain.ErrLoginRateLimited):
+			util.WriteError(w, http.StatusTooManyRequests, "login_rate_limited", "too many failed login attempts, try again later")
 		case errors.Is(err, domain.ErrInvalidCredentials):
 			util.WriteError(w, http.StatusUnauthorized, "invalid_credentials", "invalid email or password")
 		case errors.Is(err, domain.ErrWeakPassword):
@@ -163,8 +165,7 @@ func (c *AuthController) HandleTOTPEnable(w http.ResponseWriter, r *http.Request
 		return
 	}
 
-	recoveryCodes, err := c.auth.EnableTOTP(r.Context(), session.UserID, req.Code)
-	if err != nil {
+	if err := c.auth.EnableTOTP(r.Context(), session.UserID, req.Code); err != nil {
 		switch {
 		case errors.Is(err, domain.ErrInvalidMFA):
 			util.WriteError(w, http.StatusUnauthorized, "invalid_mfa", "invalid totp code")
@@ -172,6 +173,8 @@ func (c *AuthController) HandleTOTPEnable(w http.ResponseWriter, r *http.Request
 			util.WriteError(w, http.StatusTooManyRequests, "mfa_rate_limited", "too many invalid mfa attempts, try again later")
 		case errors.Is(err, domain.ErrMissingTOTPSecret):
 			util.WriteError(w, http.StatusBadRequest, "totp_not_initialized", "totp setup required before enable")
+		case errors.Is(err, domain.ErrTOTPAlreadyEnabled):
+			util.WriteError(w, http.StatusConflict, "totp_already_enabled", "totp is already enabled")
 		default:
 			c.log.ErrorContext(r.Context(), "enable totp failed", slog.String("user_id", session.UserID), slog.Any("error", err))
 			util.WriteError(w, http.StatusInternalServerError, "internal_error", "failed to enable totp")
@@ -179,10 +182,7 @@ func (c *AuthController) HandleTOTPEnable(w http.ResponseWriter, r *http.Request
 		return
 	}
 
-	util.WriteJSON(w, http.StatusOK, dto.TOTPEnableResponse{
-		Status:        "totp_enabled",
-		RecoveryCodes: recoveryCodes,
-	})
+	util.WriteJSON(w, http.StatusOK, dto.TOTPEnableResponse{Status: "totp_enabled"})
 }
 
 func (c *AuthController) HandleTOTPVerify(w http.ResponseWriter, r *http.Request, session domain.Session) {
@@ -219,119 +219,60 @@ func (c *AuthController) HandleTOTPDisable(w http.ResponseWriter, r *http.Reques
 	util.WriteJSON(w, http.StatusOK, dto.StatusResponse{Status: "totp_disabled"})
 }
 
-func (c *AuthController) HandleRecoverySetup(w http.ResponseWriter, r *http.Request, session domain.Session) {
-	var req dto.RecoverySetupRequest
+// HandleRequestPasswordReset emails a reset code. Always responds 200 with a
+// generic message so it cannot be used to enumerate registered emails.
+func (c *AuthController) HandleRequestPasswordReset(w http.ResponseWriter, r *http.Request) {
+	var req dto.PasswordResetRequestRequest
 	if err := util.ReadJSON(r, &req); err != nil {
 		util.WriteError(w, http.StatusBadRequest, "invalid_json", "invalid request body")
 		return
 	}
 
-	if strings.TrimSpace(req.RecoveryKey) == "" {
-		util.WriteError(w, http.StatusBadRequest, "invalid_recovery_key", "recovery key is required")
-		return
+	if err := c.auth.RequestPasswordResetEmail(r.Context(), req.Email); err != nil {
+		// Log but don't surface — keep the response identical regardless.
+		c.log.ErrorContext(r.Context(), "request password reset failed", slog.Any("error", err))
 	}
 
-	var wrappedKEK, wrapNonce, kekSalt []byte
-	var err error
-	if strings.TrimSpace(req.WrappedKEK) != "" {
-		wrappedKEK, err = decodeBase64Required(req.WrappedKEK)
-		if err != nil {
-			util.WriteError(w, http.StatusBadRequest, "invalid_wrapped_kek", "wrapped_kek must be valid base64")
-			return
-		}
-		wrapNonce, err = decodeBase64Required(req.WrapNonce)
-		if err != nil {
-			util.WriteError(w, http.StatusBadRequest, "invalid_wrap_nonce", "wrap_nonce must be valid base64")
-			return
-		}
-		kekSalt, err = decodeBase64Required(req.KEKSalt)
-		if err != nil {
-			util.WriteError(w, http.StatusBadRequest, "invalid_kek_salt", "kek_salt must be valid base64")
-			return
-		}
-	}
-
-	if err := c.auth.SetupRecovery(r.Context(), session.UserID, req.RecoveryKey, wrappedKEK, wrapNonce, kekSalt); err != nil {
-		switch {
-		case errors.Is(err, domain.ErrInvalidRecoveryKey):
-			util.WriteError(w, http.StatusBadRequest, "invalid_recovery_key", "invalid recovery key")
-		default:
-			c.log.ErrorContext(r.Context(), "setup recovery failed", slog.String("user_id", session.UserID), slog.Any("error", err))
-			util.WriteError(w, http.StatusInternalServerError, "internal_error", "failed to setup recovery")
-		}
-		return
-	}
-
-	util.WriteJSON(w, http.StatusOK, dto.RecoverySetupResponse{Status: "recovery_configured"})
+	util.WriteJSON(w, http.StatusOK, dto.StatusResponse{Status: "reset_email_sent"})
 }
 
-func (c *AuthController) HandleGetRecoveryStatus(w http.ResponseWriter, r *http.Request, session domain.Session) {
-	status, err := c.auth.GetRecoveryStatus(r.Context(), session.UserID)
-	if err != nil {
-		c.log.ErrorContext(r.Context(), "get recovery status failed", slog.String("user_id", session.UserID), slog.Any("error", err))
-		util.WriteError(w, http.StatusInternalServerError, "internal_error", "failed to check recovery status")
-		return
-	}
-	util.WriteJSON(w, http.StatusOK, dto.RecoveryStatusResponse{IsEnabled: status})
-}
-
-func (c *AuthController) HandleRecoveryVerify(w http.ResponseWriter, r *http.Request) {
-	var req dto.RecoveryVerifyRequest
+// HandleVerifyPasswordReset validates the emailed code and returns a reset token.
+func (c *AuthController) HandleVerifyPasswordReset(w http.ResponseWriter, r *http.Request) {
+	var req dto.PasswordResetVerifyRequest
 	if err := util.ReadJSON(r, &req); err != nil {
 		util.WriteError(w, http.StatusBadRequest, "invalid_json", "invalid request body")
 		return
 	}
 
-	token, expiresAt, recoveryRecord, err := c.auth.VerifyRecoveryKey(r.Context(), req.Email, req.RecoveryKey, req.TOTPCode)
+	token, expiresAt, err := c.auth.VerifyPasswordResetCode(r.Context(), req.Email, req.Code)
 	if err != nil {
 		switch {
-		case errors.Is(err, domain.ErrInvalidCredentials):
-			util.WriteError(w, http.StatusUnauthorized, "invalid_credentials", "invalid email")
-		case errors.Is(err, domain.ErrInvalidRecoveryKey):
-			util.WriteError(w, http.StatusUnauthorized, "invalid_recovery_key", "invalid recovery key")
-		case errors.Is(err, domain.ErrRecoveryNotSetup):
-			util.WriteError(w, http.StatusBadRequest, "recovery_not_setup", "account recovery is not configured")
-		case errors.Is(err, domain.ErrRecoveryCooldown):
-			util.WriteError(w, http.StatusTooManyRequests, "recovery_cooldown", "recovery attempted too recently, try again later")
-		case errors.Is(err, domain.ErrMFARequired):
-			util.WriteJSON(w, http.StatusUnauthorized, dto.MFARequiredResponse{
-				Error:       "mfa_required",
-				Message:     "totp code is required for recovery",
-				MFARequired: true,
-			})
-		case errors.Is(err, domain.ErrInvalidMFA):
-			util.WriteError(w, http.StatusUnauthorized, "invalid_mfa", "invalid totp code")
-		case errors.Is(err, domain.ErrMFARateLimited):
-			util.WriteError(w, http.StatusTooManyRequests, "mfa_rate_limited", "too many invalid mfa attempts, try again later")
+		case errors.Is(err, domain.ErrInvalidVerificationCode):
+			util.WriteError(w, http.StatusUnauthorized, "invalid_code", "invalid or expired verification code")
 		default:
-			c.log.ErrorContext(r.Context(), "verify recovery key failed", slog.Any("error", err))
-			util.WriteError(w, http.StatusInternalServerError, "internal_error", "failed to verify recovery key")
+			c.log.ErrorContext(r.Context(), "verify password reset failed", slog.Any("error", err))
+			util.WriteError(w, http.StatusInternalServerError, "internal_error", "failed to verify code")
 		}
 		return
 	}
 
-	resp := dto.RecoveryVerifyResponse{
-		RecoveryToken: token,
-		ExpiresAt:     expiresAt.UTC().Format(time.RFC3339),
-	}
-	if recoveryRecord != nil && len(recoveryRecord.WrappedKEK) > 0 {
-		resp.WrappedKEK = encodeBase64(recoveryRecord.WrappedKEK)
-		resp.WrapNonce = encodeBase64(recoveryRecord.WrapNonce)
-		resp.KEKSalt = encodeBase64(recoveryRecord.KEKSalt)
-	}
-	util.WriteJSON(w, http.StatusOK, resp)
+	util.WriteJSON(w, http.StatusOK, dto.PasswordResetVerifyResponse{
+		ResetToken: token,
+		ExpiresAt:  expiresAt.UTC().Format(time.RFC3339),
+	})
 }
 
-func (c *AuthController) HandleRecoveryReset(w http.ResponseWriter, r *http.Request) {
-	var req dto.RecoveryResetRequest
+// HandleConfirmPasswordReset sets a new master password and wipes the vault.
+func (c *AuthController) HandleConfirmPasswordReset(w http.ResponseWriter, r *http.Request) {
+	var req dto.PasswordResetConfirmRequest
 	if err := util.ReadJSON(r, &req); err != nil {
 		util.WriteError(w, http.StatusBadRequest, "invalid_json", "invalid request body")
 		return
 	}
 
-	output, err := c.auth.ResetPassword(
+	output, err := c.auth.ResetPasswordViaEmail(
 		r.Context(),
-		req.RecoveryToken,
+		req.ResetToken,
 		req.NewPassword,
 		req.DeviceName,
 		util.ClientIPFromRequest(r),
@@ -340,19 +281,18 @@ func (c *AuthController) HandleRecoveryReset(w http.ResponseWriter, r *http.Requ
 	if err != nil {
 		switch {
 		case errors.Is(err, domain.ErrInvalidRecoveryToken):
-			util.WriteError(w, http.StatusUnauthorized, "invalid_recovery_token", "invalid or expired recovery token")
-		case errors.Is(err, domain.ErrWeakPassword):
-			util.WriteError(w, http.StatusBadRequest, "weak_password", "password does not meet complexity requirements")
+			util.WriteError(w, http.StatusUnauthorized, "invalid_reset_token", "invalid or expired reset token")
+		case errors.Is(err, domain.ErrInvalidAuthVerifier):
+			util.WriteError(w, http.StatusBadRequest, "invalid_password", "invalid password payload")
 		default:
-			c.log.ErrorContext(r.Context(), "reset password failed", slog.Any("error", err))
+			c.log.ErrorContext(r.Context(), "confirm password reset failed", slog.Any("error", err))
 			util.WriteError(w, http.StatusInternalServerError, "internal_error", "failed to reset password")
 		}
 		return
 	}
 
 	c.setSessionCookie(w, output.SessionToken, output.ExpiresAt)
-
-	util.WriteJSON(w, http.StatusOK, dto.RecoveryResetResponse{
+	util.WriteJSON(w, http.StatusOK, dto.PasswordResetConfirmResponse{
 		Status:      "password_reset",
 		UserID:      output.UserID,
 		Email:       output.Email,
@@ -362,34 +302,20 @@ func (c *AuthController) HandleRecoveryReset(w http.ResponseWriter, r *http.Requ
 	})
 }
 
-func decodeHex(value string) ([]byte, error) {
-	trimmed := strings.TrimSpace(value)
-	if trimmed == "" {
-		return nil, errors.New("empty hex string")
+// HandleRequestMFAEmailCode emails an MFA-recovery code for users who can't use
+// their authenticator. Always responds 200 to avoid leaking account state.
+func (c *AuthController) HandleRequestMFAEmailCode(w http.ResponseWriter, r *http.Request) {
+	var req dto.MFAEmailCodeRequest
+	if err := util.ReadJSON(r, &req); err != nil {
+		util.WriteError(w, http.StatusBadRequest, "invalid_json", "invalid request body")
+		return
 	}
-	raw := make([]byte, len(trimmed)/2)
-	for i := 0; i < len(raw); i++ {
-		high := hexVal(trimmed[2*i])
-		low := hexVal(trimmed[2*i+1])
-		if high < 0 || low < 0 {
-			return nil, errors.New("invalid hex character")
-		}
-		raw[i] = byte(high<<4 | low)
-	}
-	return raw, nil
-}
 
-func hexVal(c byte) int {
-	switch {
-	case c >= '0' && c <= '9':
-		return int(c - '0')
-	case c >= 'a' && c <= 'f':
-		return int(c - 'a' + 10)
-	case c >= 'A' && c <= 'F':
-		return int(c - 'A' + 10)
-	default:
-		return -1
+	if err := c.auth.RequestMFAEmailCode(r.Context(), req.Email, req.Password); err != nil {
+		c.log.ErrorContext(r.Context(), "request mfa email code failed", slog.Any("error", err))
 	}
+
+	util.WriteJSON(w, http.StatusOK, dto.StatusResponse{Status: "mfa_email_sent"})
 }
 
 func (c *AuthController) sessionTokenFromRequest(r *http.Request) string {
@@ -418,12 +344,11 @@ func (c *AuthController) setSessionCookie(w http.ResponseWriter, token string, e
 		MaxAge:   maxAge,
 	}
 
-	// For cross-domain cookies (Vercel -> Render), we MUST use SameSite=None + Secure.
-	if c.sessionCookieSecure {
-		cookie.SameSite = http.SameSiteNoneMode
-	} else {
-		cookie.SameSite = http.SameSiteLaxMode
-	}
+	// Frontend and backend are served from the same registrable domain
+	// (subdomains of jattin.in), so SameSite=Lax keeps the session cookie on
+	// our own same-site requests while the browser withholds it from cross-site
+	// requests — neutralizing CSRF without a separate token.
+	cookie.SameSite = http.SameSiteLaxMode
 
 	http.SetCookie(w, cookie)
 }
@@ -439,11 +364,7 @@ func (c *AuthController) clearSessionCookie(w http.ResponseWriter) {
 		MaxAge:   -1,
 	}
 
-	if c.sessionCookieSecure {
-		cookie.SameSite = http.SameSiteNoneMode
-	} else {
-		cookie.SameSite = http.SameSiteLaxMode
-	}
+	cookie.SameSite = http.SameSiteLaxMode
 
 	http.SetCookie(w, cookie)
 }

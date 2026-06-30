@@ -38,17 +38,47 @@ func BearerToken(header string) string {
 	return strings.TrimSpace(parts[1])
 }
 
+// trustedProxyCount is the number of trusted reverse proxies in front of the
+// app, configured once at startup via ConfigureTrustedProxies. It governs how
+// X-Forwarded-For is interpreted in ClientIPFromRequest.
+var trustedProxyCount int
+
+// ConfigureTrustedProxies sets the trusted proxy count used when deriving the
+// client IP from X-Forwarded-For. Call once during startup.
+func ConfigureTrustedProxies(n int) {
+	if n < 0 {
+		n = 0
+	}
+	trustedProxyCount = n
+}
+
 // ClientIPFromRequest extracts the client's IP address from the request.
-// X-Forwarded-For is preferred (for proxy deployments); falls back to RemoteAddr.
-// The port suffix is always stripped so the result is safe to store in a Postgres INET column.
+//
+// X-Forwarded-For is only trusted when at least one trusted proxy is
+// configured (see ConfigureTrustedProxies). In that case the client IP is the
+// Nth entry counted from the right, where N is the trusted proxy count: the
+// trusted proxies append their immediate peers on the right, so any values a
+// client tries to inject sit to the left and are ignored. When no proxy is
+// trusted, RemoteAddr is used. The port suffix is always stripped so the
+// result is safe to store in a Postgres INET column.
 func ClientIPFromRequest(r *http.Request) string {
-	forwarded := strings.TrimSpace(r.Header.Get("X-Forwarded-For"))
-	if forwarded != "" {
-		parts := strings.Split(forwarded, ",")
-		if len(parts) > 0 {
-			return NormalizeIP(strings.TrimSpace(parts[0]))
+	if trustedProxyCount > 0 {
+		forwarded := strings.TrimSpace(r.Header.Get("X-Forwarded-For"))
+		if forwarded != "" {
+			parts := make([]string, 0)
+			for _, p := range strings.Split(forwarded, ",") {
+				if trimmed := strings.TrimSpace(p); trimmed != "" {
+					parts = append(parts, trimmed)
+				}
+			}
+			if len(parts) > 0 {
+				idx := len(parts) - trustedProxyCount
+				if idx < 0 {
+					idx = 0
+				}
+				return NormalizeIP(parts[idx])
+			}
 		}
 	}
 	return NormalizeIP(r.RemoteAddr)
 }
-

@@ -26,11 +26,11 @@ type RegisterResponse struct {
 }
 
 type LoginRequest struct {
-	Email        string `json:"email"`
-	Password     string `json:"password"`
-	TOTPCode     string `json:"totp_code"`
-	RecoveryCode string `json:"recovery_code"`
-	DeviceName   string `json:"device_name"`
+	Email      string `json:"email"`
+	Password   string `json:"password"`
+	TOTPCode   string `json:"totp_code"`
+	EmailCode  string `json:"email_code"`
+	DeviceName string `json:"device_name"`
 }
 
 type LoginResponse struct {
@@ -69,56 +69,47 @@ type TOTPCodeRequest struct {
 }
 
 type TOTPEnableResponse struct {
-	Status        string   `json:"status"`
-	RecoveryCodes []string `json:"recovery_codes"`
-}
-
-type StatusResponse struct {
 	Status string `json:"status"`
 }
 
-type RecoverySetupRequest struct {
-	RecoveryKey string `json:"recovery_key"`
-	WrappedKEK  string `json:"wrapped_kek"`
-	WrapNonce   string `json:"wrap_nonce"`
-	KEKSalt     string `json:"kek_salt"`
+// ── Email-based password reset & MFA recovery ──────────────────────────────
+
+type PasswordResetRequestRequest struct {
+	Email string `json:"email"`
 }
 
-type RecoverySetupResponse struct {
-	Status string `json:"status"`
+type PasswordResetVerifyRequest struct {
+	Email string `json:"email"`
+	Code  string `json:"code"`
 }
 
-type RecoveryStatusResponse struct {
-	IsEnabled bool `json:"is_enabled"`
+type PasswordResetVerifyResponse struct {
+	ResetToken string `json:"reset_token"`
+	ExpiresAt  string `json:"expires_at"`
 }
 
-type RecoveryVerifyRequest struct {
-	Email       string `json:"email"`
-	RecoveryKey string `json:"recovery_key"`
-	TOTPCode    string `json:"totp_code"`
+type PasswordResetConfirmRequest struct {
+	ResetToken  string `json:"reset_token"`
+	NewPassword string `json:"new_password"`
+	DeviceName  string `json:"device_name"`
 }
 
-type RecoveryVerifyResponse struct {
-	RecoveryToken string `json:"recovery_token"`
-	ExpiresAt     string `json:"expires_at"`
-	WrappedKEK    string `json:"wrapped_kek,omitempty"`
-	WrapNonce     string `json:"wrap_nonce,omitempty"`
-	KEKSalt       string `json:"kek_salt,omitempty"`
-}
-
-type RecoveryResetRequest struct {
-	RecoveryToken string `json:"recovery_token"`
-	NewPassword   string `json:"new_password"`
-	DeviceName    string `json:"device_name"`
-}
-
-type RecoveryResetResponse struct {
+type PasswordResetConfirmResponse struct {
 	Status      string `json:"status"`
 	UserID      string `json:"user_id"`
 	Email       string `json:"email"`
 	Name        string `json:"name"`
 	ExpiresAt   string `json:"expires_at"`
 	TOTPEnabled bool   `json:"is_totp_enabled"`
+}
+
+type MFAEmailCodeRequest struct {
+	Email    string `json:"email"`
+	Password string `json:"password"`
+}
+
+type StatusResponse struct {
+	Status string `json:"status"`
 }
 
 type UpdateProfileRequest struct {

@@ -2,6 +2,7 @@ import { createContext, useContext, useEffect, useState, ReactNode } from "react
 import { authService } from "../../features/auth/services/auth.service";
 import { ApiError } from "../../lib/api";
 import { LoginRequest, RegisterRequest } from "../../features/auth/types";
+import { deriveAuthVerifier } from "../../crypto/auth";
 
 interface SessionState {
     userId: string;
@@ -64,7 +65,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     };
 
     const login = async (req: LoginRequest) => {
-        const res = await authService.login(req);
+        // Derive the auth verifier client-side; the plaintext master password
+        // never reaches the server.
+        const verifier = await deriveAuthVerifier(req.email, req.password);
+        const res = await authService.login({ ...req, password: verifier });
         // If it requires MFA, authService throws an ApiError with code "mfa_required"
         setSessionRaw({
             userId: res.user_id,
@@ -76,7 +80,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     };
 
     const register = async (req: RegisterRequest) => {
-        await authService.register(req);
+        const verifier = await deriveAuthVerifier(req.email, req.password);
+        await authService.register({ ...req, password: verifier });
     };
 
     const logout = async () => {

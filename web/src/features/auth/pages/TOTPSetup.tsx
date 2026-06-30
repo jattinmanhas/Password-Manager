@@ -32,7 +32,6 @@ export function TOTPSetup() {
     const [apiError, setApiError] = useState("");
     const [loading, setLoading] = useState(false);
     const [setupError, setSetupError] = useState("");
-    const [recoveryCodes, setRecoveryCodes] = useState<string[]>([]);
     // Guard: only initialize QR once per mount after the session is confirmed loaded
     const hasInitialized = useRef(false);
 
@@ -61,8 +60,7 @@ export function TOTPSetup() {
         setApiError("");
         setLoading(true);
         try {
-            const res = await authService.enableTOTP(data.code);
-            setRecoveryCodes(res.recovery_codes);
+            await authService.enableTOTP(data.code);
             await refreshSession();
             toast.success("Two-Factor Authentication Enabled!");
         } catch (err) {
@@ -111,7 +109,7 @@ export function TOTPSetup() {
         );
     }
 
-    if (session?.isTotpEnabled && recoveryCodes.length === 0) {
+    if (session?.isTotpEnabled) {
         return (
             <Wrapper>
                 <Card>
@@ -150,33 +148,6 @@ export function TOTPSetup() {
                         style={{ color: "var(--color-red)", width: "100%" }}
                     >
                         Disable 2FA
-                    </Button>
-                </Card>
-            </Wrapper>
-        );
-    }
-
-    if (recoveryCodes.length > 0) {
-        return (
-            <Wrapper>
-                <Card>
-                    <h2 className="card-title">Setup Complete!</h2>
-                    <p className="card-desc">Save these recovery codes in a secure place. They can be used to access your account if you lose your authenticator device.</p>
-                    
-                    <div style={{ 
-                        backgroundColor: "var(--color-soft-gray)", padding: "1.5rem", 
-                        borderRadius: "var(--radius-xl)", marginBottom: "1.5rem", 
-                        fontFamily: "monospace", textAlign: "center", 
-                        display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0.75rem",
-                        border: "1px solid var(--color-border)"
-                    }}>
-                        {recoveryCodes.map((rc, i) => (
-                            <div key={i} style={{ color: "var(--color-text-main)", fontWeight: 600 }}>{rc}</div>
-                        ))}
-                    </div>
-
-                    <Button onClick={() => setRecoveryCodes([])} className="w-100">
-                        Finish Setup
                     </Button>
                 </Card>
             </Wrapper>

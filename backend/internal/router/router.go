@@ -78,6 +78,8 @@ func NewRouter(cfg config.Config, logger *slog.Logger, auditService *service.Aud
 	authMiddleware := middlewares.NewAuthMiddleware(authService, cfg.SessionCookieName)
 	mux := http.NewServeMux()
 
+	util.ConfigureTrustedProxies(cfg.TrustedProxyCount)
+
 	authLimiter := middlewares.NewRateLimiter(rate.Limit(5), 15)
 	root := newRouteGroup(mux, "/")
 	v1 := root.Group("/api/v1")
@@ -101,8 +103,11 @@ func NewRouter(cfg config.Config, logger *slog.Logger, auditService *service.Aud
 	// Auth routes - Unauthenticated
 	auth.Handle(http.MethodPost, "/register", authController.HandleRegister, authLimiter.Middleware)
 	auth.Handle(http.MethodPost, "/login", authController.HandleLogin, authLimiter.Middleware)
-	auth.Handle(http.MethodPost, "/recovery/verify", authController.HandleRecoveryVerify, authLimiter.Middleware)
-	auth.Handle(http.MethodPost, "/recovery/reset", authController.HandleRecoveryReset, authLimiter.Middleware)
+	// Email-based password reset + MFA recovery.
+	auth.Handle(http.MethodPost, "/password-reset/request", authController.HandleRequestPasswordReset, authLimiter.Middleware)
+	auth.Handle(http.MethodPost, "/password-reset/verify", authController.HandleVerifyPasswordReset, authLimiter.Middleware)
+	auth.Handle(http.MethodPost, "/password-reset/confirm", authController.HandleConfirmPasswordReset, authLimiter.Middleware)
+	auth.Handle(http.MethodPost, "/mfa/email/request", authController.HandleRequestMFAEmailCode, authLimiter.Middleware)
 
 	// Auth routes - Authenticated
 	auth.Handle(http.MethodGet, "/me", authMiddleware.WithSession(authController.HandleMe))
@@ -114,10 +119,6 @@ func NewRouter(cfg config.Config, logger *slog.Logger, auditService *service.Aud
 	auth.Handle(http.MethodPost, "/totp/enable", authMiddleware.WithSession(authController.HandleTOTPEnable))
 	auth.Handle(http.MethodPost, "/totp/verify", authMiddleware.WithSession(authController.HandleTOTPVerify))
 	auth.Handle(http.MethodPost, "/totp/disable", authMiddleware.WithSession(authController.HandleTOTPDisable))
-
-	// Recovery setup
-	auth.Handle(http.MethodGet, "/recovery/status", authMiddleware.WithSession(authController.HandleGetRecoveryStatus))
-	auth.Handle(http.MethodPost, "/recovery/setup", authMiddleware.WithSession(authController.HandleRecoverySetup))
 
 	// Folder routes
 	folders.Handle(http.MethodPost, "", authMiddleware.WithSession(folderController.HandleCreateFolder))

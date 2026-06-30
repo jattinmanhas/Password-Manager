@@ -187,8 +187,8 @@ func (r *SharingRepository) ListSentShares(ctx context.Context, userID string) (
 			return nil, fmt.Errorf("scan sent share: %w", err)
 		}
 		// Extract title from metadata (which is JSON)
-		// Assuming metadata is decrypted title or similar? 
-		// Wait, the item title is inside the encrypted ciphertext usually. 
+		// Assuming metadata is decrypted title or similar?
+		// Wait, the item title is inside the encrypted ciphertext usually.
 		// Actually, in this project, 'metadata' in vault_items table stores the decrypted title/url for indexing/display?
 		// Let me check vault_repository.go or vault_controller.go to see what's in metadata.
 		// Actually, for simplicity, I'll just return the item ID and metadata for now.

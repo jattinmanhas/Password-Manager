@@ -238,12 +238,6 @@ func (r *AuthRepository) DisableTOTP(ctx context.Context, userID string) error {
 		return domain.ErrNotFound
 	}
 
-	// Also delete any recovery codes for this user
-	_, err = r.db.ExecContext(ctx, `DELETE FROM totp_recovery_codes WHERE user_id = $1`, userID)
-	if err != nil {
-		return fmt.Errorf("delete recovery codes: %w", err)
-	}
-
 	return nil
 }
 
@@ -376,50 +370,6 @@ func (r *AuthRepository) ResetTOTPFailures(ctx context.Context, userID string) e
 	return nil
 }
 
-func (r *AuthRepository) ReplaceRecoveryCodes(ctx context.Context, userID string, codeHashes [][]byte) error {
-	tx, err := r.db.BeginTx(ctx, &sql.TxOptions{})
-	if err != nil {
-		return fmt.Errorf("start replace recovery codes tx: %w", err)
-	}
-
-	if _, err := tx.ExecContext(ctx, `DELETE FROM totp_recovery_codes WHERE user_id = $1`, userID); err != nil {
-		_ = tx.Rollback()
-		return fmt.Errorf("delete old recovery codes: %w", err)
-	}
-
-	for _, hash := range codeHashes {
-		if _, err := tx.ExecContext(ctx, `
-			INSERT INTO totp_recovery_codes (user_id, code_hash, created_at)
-			VALUES ($1, $2, NOW())
-		`, userID, hash); err != nil {
-			_ = tx.Rollback()
-			return fmt.Errorf("insert recovery code: %w", err)
-		}
-	}
-
-	if err := tx.Commit(); err != nil {
-		return fmt.Errorf("commit replace recovery codes tx: %w", err)
-	}
-	return nil
-}
-
-func (r *AuthRepository) ConsumeRecoveryCode(ctx context.Context, userID string, codeHash []byte) (bool, error) {
-	result, err := r.db.ExecContext(ctx, `
-		UPDATE totp_recovery_codes
-		SET used_at = NOW()
-		WHERE user_id = $1 AND code_hash = $2 AND used_at IS NULL
-	`, userID, codeHash)
-	if err != nil {
-		return false, fmt.Errorf("consume recovery code: %w", err)
-	}
-
-	affected, err := result.RowsAffected()
-	if err != nil {
-		return false, fmt.Errorf("read rows affected: %w", err)
-	}
-	return affected > 0, nil
-}
-
 func (r *AuthRepository) DeleteExpiredSessions(ctx context.Context) (int64, error) {
 	result, err := r.db.ExecContext(ctx, `
 		DELETE FROM sessions WHERE expires_at < NOW() OR revoked_at IS NOT NULL
@@ -452,65 +402,6 @@ func (r *AuthRepository) RevokeAllUserSessions(ctx context.Context, userID strin
 	return affected, nil
 }
 
-func (r *AuthRepository) SetupRecovery(ctx context.Context, input domain.SetupRecoveryInput) error {
-	_, err := r.db.ExecContext(ctx, `
-		INSERT INTO user_recovery (user_id, recovery_key_hash, recovery_enabled, wrapped_kek, wrap_nonce, kek_salt, updated_at)
-		VALUES ($1, $2, TRUE, $3, $4, $5, NOW())
-		ON CONFLICT (user_id) DO UPDATE SET
-			recovery_key_hash = EXCLUDED.recovery_key_hash,
-			recovery_enabled = TRUE,
-			wrapped_kek = EXCLUDED.wrapped_kek,
-			wrap_nonce = EXCLUDED.wrap_nonce,
-			kek_salt = EXCLUDED.kek_salt,
-			updated_at = NOW()
-	`, input.UserID, input.RecoveryKeyHash, input.WrappedKEK, input.WrapNonce, input.KEKSalt)
-	if err != nil {
-		return fmt.Errorf("setup recovery: %w", err)
-	}
-	return nil
-}
-
-func (r *AuthRepository) GetRecoveryRecord(ctx context.Context, userID string) (domain.RecoveryRecord, error) {
-	var record domain.RecoveryRecord
-	var lastRecoveryAt sql.NullTime
-	var wrappedKEK, wrapNonce, kekSalt []byte
-	err := r.db.QueryRowContext(ctx, `
-		SELECT user_id, recovery_key_hash, recovery_enabled, last_recovery_at,
-		       wrapped_kek, wrap_nonce, kek_salt
-		FROM user_recovery
-		WHERE user_id = $1
-	`, userID).Scan(
-		&record.UserID, &record.RecoveryKeyHash, &record.RecoveryEnabled, &lastRecoveryAt,
-		&wrappedKEK, &wrapNonce, &kekSalt,
-	)
-	if err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
-			return domain.RecoveryRecord{}, domain.ErrNotFound
-		}
-		return domain.RecoveryRecord{}, fmt.Errorf("query recovery record: %w", err)
-	}
-	if lastRecoveryAt.Valid {
-		t := lastRecoveryAt.Time.UTC()
-		record.LastRecoveryAt = &t
-	}
-	record.WrappedKEK = wrappedKEK
-	record.WrapNonce = wrapNonce
-	record.KEKSalt = kekSalt
-	return record, nil
-}
-
-func (r *AuthRepository) UpdateLastRecoveryAt(ctx context.Context, userID string) error {
-	_, err := r.db.ExecContext(ctx, `
-		UPDATE user_recovery
-		SET last_recovery_at = NOW(), updated_at = NOW()
-		WHERE user_id = $1
-	`, userID)
-	if err != nil {
-		return fmt.Errorf("update last recovery at: %w", err)
-	}
-	return nil
-}
-
 func (r *AuthRepository) UpdatePassword(ctx context.Context, input domain.ResetPasswordInput) error {
 	result, err := r.db.ExecContext(ctx, `
 		UPDATE auth_credentials
@@ -532,6 +423,90 @@ func (r *AuthRepository) UpdatePassword(ctx context.Context, input domain.ResetP
 	}
 	if affected == 0 {
 		return domain.ErrNotFound
+	}
+	return nil
+}
+
+func (r *AuthRepository) CreateEmailVerificationCode(ctx context.Context, input domain.EmailVerificationCodeInput) error {
+	_, err := r.db.ExecContext(ctx, `
+		INSERT INTO email_verification_codes (id, user_id, purpose, code_hash, attempts, expires_at, created_at)
+		VALUES ($1, $2, $3, $4, 0, $5, NOW())
+	`, input.ID, input.UserID, input.Purpose, input.CodeHash, input.ExpiresAt.UTC())
+	if err != nil {
+		return fmt.Errorf("create email verification code: %w", err)
+	}
+	return nil
+}
+
+func (r *AuthRepository) GetLatestEmailVerificationCode(ctx context.Context, userID string, purpose string) (domain.EmailVerificationCode, error) {
+	var code domain.EmailVerificationCode
+	err := r.db.QueryRowContext(ctx, `
+		SELECT id, user_id, purpose, code_hash, attempts, expires_at
+		FROM email_verification_codes
+		WHERE user_id = $1 AND purpose = $2 AND consumed_at IS NULL
+		ORDER BY created_at DESC
+		LIMIT 1
+	`, userID, purpose).Scan(&code.ID, &code.UserID, &code.Purpose, &code.CodeHash, &code.Attempts, &code.ExpiresAt)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return domain.EmailVerificationCode{}, domain.ErrNotFound
+		}
+		return domain.EmailVerificationCode{}, fmt.Errorf("get email verification code: %w", err)
+	}
+	code.ExpiresAt = code.ExpiresAt.UTC()
+	return code, nil
+}
+
+func (r *AuthRepository) MarkEmailVerificationCodeConsumed(ctx context.Context, id string) error {
+	if _, err := r.db.ExecContext(ctx, `
+		UPDATE email_verification_codes SET consumed_at = NOW() WHERE id = $1
+	`, id); err != nil {
+		return fmt.Errorf("mark email verification code consumed: %w", err)
+	}
+	return nil
+}
+
+func (r *AuthRepository) IncrementEmailVerificationAttempts(ctx context.Context, id string) error {
+	if _, err := r.db.ExecContext(ctx, `
+		UPDATE email_verification_codes SET attempts = attempts + 1 WHERE id = $1
+	`, id); err != nil {
+		return fmt.Errorf("increment email verification attempts: %w", err)
+	}
+	return nil
+}
+
+func (r *AuthRepository) InvalidateEmailVerificationCodes(ctx context.Context, userID string, purpose string) error {
+	if _, err := r.db.ExecContext(ctx, `
+		UPDATE email_verification_codes SET consumed_at = NOW()
+		WHERE user_id = $1 AND purpose = $2 AND consumed_at IS NULL
+	`, userID, purpose); err != nil {
+		return fmt.Errorf("invalidate email verification codes: %w", err)
+	}
+	return nil
+}
+
+func (r *AuthRepository) WipeUserVault(ctx context.Context, userID string) error {
+	tx, err := r.db.BeginTx(ctx, &sql.TxOptions{})
+	if err != nil {
+		return fmt.Errorf("begin wipe vault tx: %w", err)
+	}
+	defer func() { _ = tx.Rollback() }()
+
+	// Deleting vault_items cascades to its versions, shares, and attachments.
+	statements := []string{
+		`DELETE FROM vault_shares WHERE user_id = $1`,
+		`DELETE FROM vault_items WHERE owner_user_id = $1`,
+		`DELETE FROM vault_folders WHERE owner_user_id = $1`,
+		`DELETE FROM user_keys WHERE user_id = $1`,
+	}
+	for _, stmt := range statements {
+		if _, err := tx.ExecContext(ctx, stmt, userID); err != nil {
+			return fmt.Errorf("wipe user vault: %w", err)
+		}
+	}
+
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("commit wipe vault tx: %w", err)
 	}
 	return nil
 }

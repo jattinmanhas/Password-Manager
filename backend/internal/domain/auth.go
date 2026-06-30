@@ -7,22 +7,46 @@ import (
 )
 
 var (
-	ErrEmailTaken           = errors.New("email already registered")
-	ErrInvalidCredentials   = errors.New("invalid credentials")
-	ErrWeakPassword         = errors.New("password does not meet complexity requirements")
-	ErrMFARequired          = errors.New("mfa required")
-	ErrInvalidMFA           = errors.New("invalid totp code")
-	ErrInvalidMFAInput      = errors.New("invalid mfa input")
-	ErrMFARateLimited       = errors.New("mfa attempts rate limited")
-	ErrUnauthorizedSession  = errors.New("unauthorized")
-	ErrMissingTOTPSecret    = errors.New("totp secret not configured")
-	ErrInvalidVaultPayload  = errors.New("invalid vault payload")
-	ErrNotFound             = errors.New("not found")
-	ErrRecoveryNotSetup     = errors.New("account recovery not configured")
-	ErrInvalidRecoveryKey   = errors.New("invalid recovery key")
-	ErrRecoveryCooldown     = errors.New("recovery attempted too recently")
-	ErrInvalidRecoveryToken = errors.New("invalid or expired recovery token")
+	ErrEmailTaken              = errors.New("email already registered")
+	ErrInvalidCredentials      = errors.New("invalid credentials")
+	ErrWeakPassword            = errors.New("password does not meet complexity requirements")
+	ErrMFARequired             = errors.New("mfa required")
+	ErrInvalidMFA              = errors.New("invalid totp code")
+	ErrInvalidMFAInput         = errors.New("invalid mfa input")
+	ErrMFARateLimited          = errors.New("mfa attempts rate limited")
+	ErrUnauthorizedSession     = errors.New("unauthorized")
+	ErrMissingTOTPSecret       = errors.New("totp secret not configured")
+	ErrInvalidVaultPayload     = errors.New("invalid vault payload")
+	ErrNotFound                = errors.New("not found")
+	ErrInvalidRecoveryToken    = errors.New("invalid or expired recovery token")
+	ErrInvalidAuthVerifier     = errors.New("invalid authentication verifier")
+	ErrLoginRateLimited        = errors.New("too many failed login attempts")
+	ErrTOTPAlreadyEnabled      = errors.New("totp already enabled")
+	ErrInvalidVerificationCode = errors.New("invalid or expired verification code")
 )
+
+// Email verification code purposes.
+const (
+	EmailCodePurposePasswordReset = "password_reset"
+	EmailCodePurposeMFARecovery   = "mfa_recovery"
+)
+
+type EmailVerificationCodeInput struct {
+	ID        string
+	UserID    string
+	Purpose   string
+	CodeHash  []byte
+	ExpiresAt time.Time
+}
+
+type EmailVerificationCode struct {
+	ID        string
+	UserID    string
+	Purpose   string
+	CodeHash  []byte
+	Attempts  int
+	ExpiresAt time.Time
+}
 
 type Argon2Params struct {
 	Memory      uint32 `json:"memory"`
@@ -41,13 +65,13 @@ type Session struct {
 }
 
 type LoginInput struct {
-	Email        string
-	Password     string
-	TOTPCode     string
-	RecoveryCode string
-	DeviceName   string
-	IPAddr       string
-	UserAgent    string
+	Email      string
+	Password   string
+	TOTPCode   string
+	EmailCode  string // emailed MFA-recovery code (alternative to TOTP)
+	DeviceName string
+	IPAddr     string
+	UserAgent  string
 }
 
 type LoginOutput struct {
@@ -112,24 +136,6 @@ type TOTPState struct {
 	LockedUntil    *time.Time
 }
 
-type RecoveryRecord struct {
-	UserID          string
-	RecoveryKeyHash []byte
-	RecoveryEnabled bool
-	LastRecoveryAt  *time.Time
-	WrappedKEK      []byte
-	WrapNonce       []byte
-	KEKSalt         []byte
-}
-
-type SetupRecoveryInput struct {
-	UserID          string
-	RecoveryKeyHash []byte
-	WrappedKEK      []byte
-	WrapNonce       []byte
-	KEKSalt         []byte
-}
-
 type ResetPasswordInput struct {
 	UserID       string
 	Algo         string
@@ -151,12 +157,19 @@ type AuthRepository interface {
 	GetTOTPState(ctx context.Context, userID string) (TOTPState, error)
 	RecordTOTPFailure(ctx context.Context, userID string, now time.Time, maxAttempts int, window time.Duration, lockDuration time.Duration) (*time.Time, error)
 	ResetTOTPFailures(ctx context.Context, userID string) error
-	ReplaceRecoveryCodes(ctx context.Context, userID string, codeHashes [][]byte) error
-	ConsumeRecoveryCode(ctx context.Context, userID string, codeHash []byte) (bool, error)
 	DeleteExpiredSessions(ctx context.Context) (int64, error)
-	SetupRecovery(ctx context.Context, input SetupRecoveryInput) error
-	GetRecoveryRecord(ctx context.Context, userID string) (RecoveryRecord, error)
-	UpdateLastRecoveryAt(ctx context.Context, userID string) error
 	UpdatePassword(ctx context.Context, input ResetPasswordInput) error
 	UpdateDisplayName(ctx context.Context, userID string, name string) error
+
+	// Email verification codes (password reset + MFA recovery).
+	CreateEmailVerificationCode(ctx context.Context, input EmailVerificationCodeInput) error
+	GetLatestEmailVerificationCode(ctx context.Context, userID string, purpose string) (EmailVerificationCode, error)
+	MarkEmailVerificationCodeConsumed(ctx context.Context, id string) error
+	IncrementEmailVerificationAttempts(ctx context.Context, id string) error
+	InvalidateEmailVerificationCodes(ctx context.Context, userID string, purpose string) error
+
+	// WipeUserVault deletes all of a user's encrypted vault data. Used on
+	// email-based master-password reset, where the old vault can no longer be
+	// decrypted (zero-knowledge), so the user starts fresh.
+	WipeUserVault(ctx context.Context, userID string) error
 }

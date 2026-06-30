@@ -148,12 +148,21 @@ export function encryptVaultItem(input: {
   kek: Uint8Array;
   aead: XChaCha20Poly1305Aead;
   associatedData?: Uint8Array;
+  // When provided, this DEK is reused instead of generating a new one. Reusing
+  // the DEK on edit keeps any existing shares of the item valid, because each
+  // share wraps this same DEK to a recipient's key. The caller owns the passed
+  // DEK and is responsible for wiping it.
+  dek?: Uint8Array;
 }): EncryptedVaultItem {
   if (input.kek.length !== input.aead.keyLength) {
     throw new Error("kek length does not match cipher key length");
   }
+  if (input.dek && input.dek.length !== input.aead.keyLength) {
+    throw new Error("dek length does not match cipher key length");
+  }
 
-  const itemDek = randomBytes(input.aead.keyLength);
+  const reuseDek = input.dek !== undefined;
+  const itemDek = input.dek ?? randomBytes(input.aead.keyLength);
   try {
     const nonce = randomBytes(input.aead.nonceLength);
     const wrapNonce = randomBytes(input.aead.nonceLength);
@@ -180,8 +189,36 @@ export function encryptVaultItem(input: {
       wrapNonce: toBase64(wrapNonce),
     };
   } finally {
-    itemDek.fill(0);
+    // Only wipe a DEK we generated here; a caller-supplied DEK is the caller's
+    // to manage.
+    if (!reuseDek) {
+      itemDek.fill(0);
+    }
   }
+}
+
+// unwrapVaultItemDek recovers the item DEK from an encrypted payload using the
+// KEK. The returned key is sensitive; the caller must wipe it after use.
+export function unwrapVaultItemDek(input: {
+  payload: Pick<EncryptedVaultItem, "wrappedDek" | "wrapNonce">;
+  kek: Uint8Array;
+  aead: XChaCha20Poly1305Aead;
+}): Uint8Array {
+  if (input.kek.length !== input.aead.keyLength) {
+    throw new Error("kek length does not match cipher key length");
+  }
+  const wrapNonce = decodeBase64Field(input.payload.wrapNonce, "wrapNonce", input.aead.nonceLength);
+  const wrappedDek = decodeBase64Field(input.payload.wrappedDek, "wrappedDek");
+  const itemDek = input.aead.decrypt({
+    key: input.kek,
+    nonce: wrapNonce,
+    ciphertext: wrappedDek,
+    associatedData: utf8ToBytes(DEK_WRAP_AAD),
+  });
+  if (itemDek.length !== input.aead.keyLength) {
+    throw new Error("wrapped DEK has unexpected key length");
+  }
+  return itemDek;
 }
 
 export function decryptVaultItem(input: {

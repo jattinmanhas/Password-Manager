@@ -14,20 +14,32 @@ func CORS(allowedOrigins string, next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		requestOrigin := strings.TrimSpace(r.Header.Get("Origin"))
 
-		allowed := false
+		explicitlyAllowed := false
+		wildcard := false
 		if requestOrigin != "" {
 			for _, o := range origins {
-				if o == "*" || o == requestOrigin {
-					allowed = true
-					break
+				switch o {
+				case requestOrigin:
+					explicitlyAllowed = true
+				case "*":
+					wildcard = true
 				}
 			}
 		}
 
-		if allowed {
+		switch {
+		case explicitlyAllowed:
+			// Reflect the specific allow-listed origin and permit credentials
+			// (cookies). Reflecting only an explicit match prevents arbitrary
+			// origins from making credentialed cross-site requests.
 			w.Header().Set("Access-Control-Allow-Origin", requestOrigin)
 			w.Header().Set("Access-Control-Allow-Credentials", "true")
 			w.Header().Add("Vary", "Origin")
+		case wildcard:
+			// Public wildcard access: allowed, but never with credentials, since
+			// "reflect any origin + allow credentials" is a CSRF/credential-theft
+			// foothold.
+			w.Header().Set("Access-Control-Allow-Origin", "*")
 		}
 
 		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")

@@ -7,11 +7,11 @@ import (
 )
 
 var (
-	ErrAlreadyShared          = errors.New("item already shared with this user")
-	ErrCannotShareWithSelf    = errors.New("cannot share an item with yourself")
-	ErrRecipientKeysNotFound  = errors.New("recipient has not set up encryption keys")
-	ErrShareNotFound          = errors.New("share not found")
-	ErrNotItemOwner           = errors.New("only the item owner can perform this action")
+	ErrAlreadyShared         = errors.New("item already shared with this user")
+	ErrCannotShareWithSelf   = errors.New("cannot share an item with yourself")
+	ErrRecipientKeysNotFound = errors.New("recipient has not set up encryption keys")
+	ErrShareNotFound         = errors.New("share not found")
+	ErrNotItemOwner          = errors.New("only the item owner can perform this action")
 )
 
 // UserKeys holds asymmetric key material for a user.

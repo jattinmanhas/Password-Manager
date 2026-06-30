@@ -2,13 +2,13 @@ package middlewares
 
 import (
 	"encoding/json"
-	"net"
 	"net/http"
-	"strings"
 	"sync"
 	"time"
 
 	"golang.org/x/time/rate"
+
+	"pmv2/backend/internal/util"
 )
 
 type clientContext struct {
@@ -49,7 +49,7 @@ func (rl *RateLimiter) cleanup() {
 
 func (rl *RateLimiter) Middleware(next http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		ip := clientIPFromRequest(r)
+		ip := util.ClientIPFromRequest(r)
 
 		rl.mu.Lock()
 		if _, found := rl.clients[ip]; !found {
@@ -71,19 +71,4 @@ func (rl *RateLimiter) Middleware(next http.HandlerFunc) http.HandlerFunc {
 
 		next.ServeHTTP(w, r)
 	}
-}
-
-func clientIPFromRequest(r *http.Request) string {
-	forwarded := strings.TrimSpace(r.Header.Get("X-Forwarded-For"))
-	if forwarded != "" {
-		parts := strings.Split(forwarded, ",")
-		if len(parts) > 0 {
-			return strings.TrimSpace(parts[0])
-		}
-	}
-	ip, _, err := net.SplitHostPort(r.RemoteAddr)
-	if err != nil {
-		return r.RemoteAddr
-	}
-	return ip
 }

@@ -21,7 +21,7 @@ export interface LoginRequest {
     password: string;
     device_name?: string;
     totp_code?: string;
-    recovery_code?: string;
+    email_code?: string;
 }
 
 export interface LoginResponse {
@@ -47,53 +47,44 @@ export interface TOTPSetupResponse {
 
 export interface TOTPEnableResponse {
     status: string;
-    recovery_codes: string[];
 }
 
-export interface StatusResponse {
-    status: string;
-}
+// ── Email-based password reset & MFA recovery ──────────────────────────────
 
-export interface RecoverySetupRequest {
-    recovery_key: string;
-    wrapped_kek?: string;
-    wrap_nonce?: string;
-    kek_salt?: string;
-}
-
-export interface RecoverySetupResponse {
-    status: string;
-}
-
-export interface RecoveryStatusResponse {
-    is_enabled: boolean;
-}
-
-export interface RecoveryVerifyRequest {
+export interface PasswordResetRequestRequest {
     email: string;
-    recovery_key: string;
-    totp_code?: string;
 }
 
-export interface RecoveryVerifyResponse {
-    recovery_token: string;
+export interface PasswordResetVerifyRequest {
+    email: string;
+    code: string;
+}
+
+export interface PasswordResetVerifyResponse {
+    reset_token: string;
     expires_at: string;
-    wrapped_kek?: string;
-    wrap_nonce?: string;
-    kek_salt?: string;
 }
 
-export interface RecoveryResetRequest {
-    recovery_token: string;
+export interface PasswordResetConfirmRequest {
+    reset_token: string;
     new_password: string;
     device_name?: string;
 }
 
-export interface RecoveryResetResponse {
+export interface PasswordResetConfirmResponse {
     status: string;
     user_id: string;
     email: string;
     name: string;
     expires_at: string;
     is_totp_enabled: boolean;
+}
+
+export interface MFAEmailCodeRequest {
+    email: string;
+    password: string;
+}
+
+export interface StatusResponse {
+    status: string;
 }
