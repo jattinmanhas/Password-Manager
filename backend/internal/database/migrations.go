@@ -111,6 +111,7 @@ CREATE TABLE IF NOT EXISTS sessions (
   device_name TEXT,
   ip_address INET,
   user_agent TEXT,
+  purpose TEXT NOT NULL DEFAULT 'auth',
   expires_at TIMESTAMPTZ NOT NULL,
   revoked_at TIMESTAMPTZ,
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
@@ -201,6 +202,12 @@ func MigrateUp(ctx context.Context, db *sql.DB) error {
 		ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMPTZ;
 	`); err != nil {
 		return fmt.Errorf("ensure vault_items.deleted_at exists: %w", err)
+	}
+	if _, err := db.ExecContext(ctx, `
+		ALTER TABLE sessions
+		ADD COLUMN IF NOT EXISTS purpose TEXT NOT NULL DEFAULT 'auth';
+	`); err != nil {
+		return fmt.Errorf("ensure sessions.purpose exists: %w", err)
 	}
 	return nil
 }

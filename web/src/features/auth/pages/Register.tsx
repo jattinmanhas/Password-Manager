@@ -97,6 +97,7 @@ export function Register() {
                             type="button"
                             onClick={() => setShowPassword(!showPassword)}
                             className="input-icon-btn"
+                            disabled={loading}
                             tabIndex={-1}
                         >
                             {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
@@ -118,7 +119,7 @@ export function Register() {
                 </div>
 
                 <div style={{ paddingTop: "0.5rem" }}>
-                    <Button type="submit" isLoading={loading}>
+                    <Button type="submit" isLoading={loading} loadingText="Creating account…">
                         Create Account
                     </Button>
                 </div>

@@ -116,18 +116,25 @@ func (r *AuthRepository) CreateSession(ctx context.Context, input domain.CreateS
 		ipAddress = input.IPAddr
 	}
 
+	purpose := input.Purpose
+	if purpose == "" {
+		purpose = domain.SessionPurposeAuth
+	}
+
 	_, err := r.db.ExecContext(ctx, `
 		INSERT INTO sessions (
-			id, user_id, refresh_token_hash, device_name, ip_address, user_agent, expires_at, created_at
-		) VALUES ($1, $2, $3, $4, $5, $6, $7, NOW())
-	`, input.SessionID, input.UserID, input.TokenHash, input.DeviceName, ipAddress, input.UserAgent, input.ExpiresAt)
+			id, user_id, refresh_token_hash, device_name, ip_address, user_agent, purpose, expires_at, created_at
+		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, NOW())
+	`, input.SessionID, input.UserID, input.TokenHash, input.DeviceName, ipAddress, input.UserAgent, purpose, input.ExpiresAt)
 	if err != nil {
 		return fmt.Errorf("insert session: %w", err)
 	}
 	return nil
 }
 
-func (r *AuthRepository) GetActiveSessionByTokenHash(ctx context.Context, tokenHash []byte) (domain.Session, error) {
+// getActiveSessionByTokenHashWithPurpose looks up a non-revoked, unexpired
+// session by token hash, constrained to the given purpose.
+func (r *AuthRepository) getActiveSessionByTokenHashWithPurpose(ctx context.Context, tokenHash []byte, purpose string) (domain.Session, error) {
 	var session domain.Session
 	var name sql.NullString
 	err := r.db.QueryRowContext(ctx, `
@@ -136,9 +143,10 @@ func (r *AuthRepository) GetActiveSessionByTokenHash(ctx context.Context, tokenH
 		JOIN users u ON u.id = s.user_id
 		JOIN auth_credentials ac ON ac.user_id = u.id
 		WHERE s.refresh_token_hash = $1
+		  AND s.purpose = $2
 		  AND s.revoked_at IS NULL
 		  AND s.expires_at > NOW()
-	`, tokenHash).Scan(&session.ID, &session.UserID, &session.Email, &name, &session.TOTPEnabled, &session.ExpiresAt)
+	`, tokenHash, purpose).Scan(&session.ID, &session.UserID, &session.Email, &name, &session.TOTPEnabled, &session.ExpiresAt)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return domain.Session{}, domain.ErrNotFound
@@ -147,6 +155,18 @@ func (r *AuthRepository) GetActiveSessionByTokenHash(ctx context.Context, tokenH
 	}
 	session.Name = name.String
 	return session, nil
+}
+
+// GetActiveSessionByTokenHash returns a normal auth session. Password-reset
+// sessions are excluded so they cannot authenticate ordinary requests.
+func (r *AuthRepository) GetActiveSessionByTokenHash(ctx context.Context, tokenHash []byte) (domain.Session, error) {
+	return r.getActiveSessionByTokenHashWithPurpose(ctx, tokenHash, domain.SessionPurposeAuth)
+}
+
+// GetActiveResetSessionByTokenHash returns a password-reset session, used only
+// by the reset-confirm flow.
+func (r *AuthRepository) GetActiveResetSessionByTokenHash(ctx context.Context, tokenHash []byte) (domain.Session, error) {
+	return r.getActiveSessionByTokenHashWithPurpose(ctx, tokenHash, domain.SessionPurposePasswordReset)
 }
 
 func (r *AuthRepository) RevokeSessionByTokenHash(ctx context.Context, tokenHash []byte) (bool, error) {

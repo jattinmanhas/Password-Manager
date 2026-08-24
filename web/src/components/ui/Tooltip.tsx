@@ -1,11 +1,12 @@
 import React, { useState } from "react";
 
 interface TooltipProps {
-  content: string;
+  content: React.ReactNode;
   children: React.ReactNode;
+  maxWidth?: number;
 }
 
-export function Tooltip({ content, children }: TooltipProps) {
+export function Tooltip({ content, children, maxWidth = 220 }: TooltipProps) {
   const [isVisible, setIsVisible] = useState(false);
 
   return (
@@ -23,13 +24,16 @@ export function Tooltip({ content, children }: TooltipProps) {
             bottom: "100%",
             left: "50%",
             transform: "translate(-50%, -0.25rem)",
-            padding: "0.375rem 0.625rem",
+            padding: "0.5rem 0.625rem",
             backgroundColor: "var(--color-text-main)",
             color: "var(--color-bg-base)",
             fontSize: "0.75rem",
-            fontWeight: 600,
+            fontWeight: 500,
+            lineHeight: 1.4,
             borderRadius: "0.375rem",
-            whiteSpace: "nowrap",
+            whiteSpace: "normal",
+            textAlign: "left",
+            width: `${maxWidth}px`,
             boxShadow: "var(--shadow-md)",
             zIndex: 100,
             pointerEvents: "none",

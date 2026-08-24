@@ -134,10 +134,11 @@ export function Login() {
                             {...mfaForm.register("code")}
                             error={mfaForm.formState.errors.code?.message || (!!apiError ? apiError : false)}
                             placeholder="000000"
+                            disabled={loading}
                         />
                     </div>
 
-                    <Button type="submit" isLoading={loading}>
+                    <Button type="submit" isLoading={loading} loadingText="Verifying…">
                         Verify
                     </Button>
 
@@ -145,7 +146,7 @@ export function Login() {
                         {mfaType === "totp" ? (
                             <button
                                 type="button"
-                                disabled={requestingEmail}
+                                disabled={requestingEmail || loading}
                                 style={{ fontSize: "0.875rem", fontWeight: 500, color: "var(--color-security-blue)" }}
                                 onClick={requestEmailCode}
                             >
@@ -154,6 +155,7 @@ export function Login() {
                         ) : (
                             <button
                                 type="button"
+                                disabled={loading}
                                 style={{ fontSize: "0.875rem", fontWeight: 500, color: "var(--color-security-blue)" }}
                                 onClick={() => {
                                     setMfaType("totp");
@@ -168,6 +170,7 @@ export function Login() {
                     <div style={{ textAlign: "center", marginTop: "0.5rem" }}>
                         <button
                             type="button"
+                            disabled={loading}
                             style={{ fontSize: "0.75rem", fontWeight: 500, color: "var(--color-text-subtle)" }}
                             onClick={() => {
                                 setMfaStep(false);
@@ -202,6 +205,7 @@ export function Login() {
                         autoComplete="email"
                         {...loginForm.register("email")}
                         error={loginForm.formState.errors.email?.message}
+                        disabled={loading}
                     />
                 </div>
 
@@ -219,11 +223,14 @@ export function Login() {
                             autoComplete="current-password"
                             {...loginForm.register("password")}
                             error={loginForm.formState.errors.password?.message}
+                            disabled={loading}
                         />
                         <button
                             type="button"
                             onClick={() => setShowPassword(!showPassword)}
                             className="input-icon-btn"
+                            disabled={loading}
+                            tabIndex={-1}
                         >
                             {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
                         </button>
@@ -234,6 +241,7 @@ export function Login() {
                     <input
                         type="checkbox"
                         id="remember"
+                        disabled={loading}
                         style={{ width: "1rem", height: "1rem", accentColor: "var(--color-security-blue)" }}
                     />
                     <Label htmlFor="remember" style={{ cursor: "pointer" }}>
@@ -241,7 +249,7 @@ export function Login() {
                     </Label>
                 </div>
 
-                <Button type="submit" isLoading={loading}>
+                <Button type="submit" isLoading={loading} loadingText="Signing in…">
                     Sign in
                 </Button>
             </form>

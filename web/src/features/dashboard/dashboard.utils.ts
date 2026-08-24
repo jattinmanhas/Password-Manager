@@ -137,3 +137,51 @@ export function calculateSecurityHealth(input: {
     },
   };
 }
+
+export interface SecurityHealthTips {
+  account: string[];
+  passwords: string[];
+  sharing: string[];
+  sensitiveData: string[];
+  integrity: string[];
+}
+
+/**
+ * Per-category action items describing exactly what to fix to bring that
+ * category's score to 100%. Mirrors the penalty math in
+ * calculateSecurityHealth so the copy always matches what's actually scored.
+ */
+export function getSecurityHealthTips(metrics: SecurityHealthMetrics, isTotpEnabled: boolean): SecurityHealthTips {
+  const account: string[] = [];
+  if (!isTotpEnabled) account.push('Enable two-factor authentication (+20%)');
+  if (metrics.corruptedItems > 0) account.push('Resolve corrupted vault items (+10%)');
+
+  const passwords: string[] = [];
+  if (metrics.emptyPasswords > 0) {
+    passwords.push(`Set a password on ${metrics.emptyPasswords} item${metrics.emptyPasswords === 1 ? '' : 's'} with none (+8% each)`);
+  }
+  const weakWithPassword = metrics.weakPasswords - metrics.emptyPasswords;
+  if (weakWithPassword > 0) {
+    passwords.push(`Strengthen ${weakWithPassword} weak password${weakWithPassword === 1 ? '' : 's'} (+12% each)`);
+  }
+  if (metrics.reusedPasswords > 0) {
+    passwords.push(`Replace ${metrics.reusedPasswords} reused password${metrics.reusedPasswords === 1 ? '' : 's'} with unique ones (+15% each)`);
+  }
+
+  const sharing: string[] = [];
+  if (metrics.sharedItems > 0) {
+    sharing.push(`Revoke sharing on ${metrics.sharedItems} item${metrics.sharedItems === 1 ? '' : 's'} (+6% each)`);
+  }
+
+  const sensitiveData: string[] = [];
+  if (metrics.sensitiveNotes > 0) {
+    sensitiveData.push(`Move ${metrics.sensitiveNotes} sensitive note${metrics.sensitiveNotes === 1 ? '' : 's'} into a proper login/card item (+8% each)`);
+  }
+
+  const integrity: string[] = [];
+  if (metrics.corruptedItems > 0) {
+    integrity.push(`Fix or remove ${metrics.corruptedItems} corrupted item${metrics.corruptedItems === 1 ? '' : 's'} (+15% each)`);
+  }
+
+  return { account, passwords, sharing, sensitiveData, integrity };
+}

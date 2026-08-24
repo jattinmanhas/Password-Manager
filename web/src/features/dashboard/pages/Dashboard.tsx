@@ -6,7 +6,7 @@ import { DashboardStats } from '../components/DashboardStats';
 import { QuickActions } from '../components/QuickActions';
 import { RecentActivity } from '../components/RecentActivity';
 import { sharingService } from '../../vault/services/sharing.service';
-import { calculateSecurityHealth } from '../dashboard.utils';
+import { calculateSecurityHealth, getSecurityHealthTips } from '../dashboard.utils';
 import { Shield, LayoutDashboard } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { HealthRecommendation } from '../components/HealthRecommendation';
@@ -72,6 +72,11 @@ export function Dashboard() {
     });
   }, [items, events, session, sharedExposureCount]);
 
+  const healthTips = useMemo(
+    () => getSecurityHealthTips(metrics, session?.isTotpEnabled ?? false),
+    [metrics, session]
+  );
+
   const getGreeting = () => {
     const hour = new Date().getHours();
     const name = session?.name?.split(' ')[0] || 'there';
@@ -112,6 +117,7 @@ export function Dashboard() {
         sensitiveNotes={metrics.sensitiveNotes}
         corruptedItems={metrics.corruptedItems}
         breakdown={metrics.breakdown}
+        healthTips={healthTips}
         isLocked={isLocked}
         onUnlockVault={handleUnlockVault}
         onLockVault={handleLockVault}

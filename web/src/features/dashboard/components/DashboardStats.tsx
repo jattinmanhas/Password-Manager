@@ -1,9 +1,10 @@
 import React from 'react';
 import { Card } from '../../../components/ui/Card';
-import { Shield, ShieldAlert, Key, Clock, Lock, Share2, StickyNote, AlertTriangle, LockOpen } from 'lucide-react';
+import { Shield, ShieldAlert, Key, Clock, Lock, Share2, StickyNote, AlertTriangle, LockOpen, Info } from 'lucide-react';
 import { SecurityScoreGauge } from './SecurityScoreGauge';
-import type { SecurityHealthBreakdown } from '../dashboard.utils';
+import type { SecurityHealthBreakdown, SecurityHealthTips } from '../dashboard.utils';
 import { Button } from '../../../components/ui/Button';
+import { Tooltip } from '../../../components/ui/Tooltip';
 
 interface DashboardStatsProps {
   totalItems: number;
@@ -15,6 +16,7 @@ interface DashboardStatsProps {
   sensitiveNotes: number;
   corruptedItems: number;
   breakdown: SecurityHealthBreakdown;
+  healthTips: SecurityHealthTips;
   isLocked?: boolean;
   onUnlockVault?: () => void;
   onLockVault?: () => void;
@@ -30,6 +32,7 @@ export const DashboardStats: React.FC<DashboardStatsProps> = ({
   sensitiveNotes,
   corruptedItems,
   breakdown,
+  healthTips,
   isLocked = false,
   onUnlockVault,
   onLockVault,
@@ -200,14 +203,37 @@ export const DashboardStats: React.FC<DashboardStatsProps> = ({
           </div>
           <div className="grid-breakdown" style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: '0.75rem' }}>
             {[
-              { label: 'Account', value: breakdown.accountScore },
-              { label: 'Passwords', value: breakdown.passwordScore },
-              { label: 'Sharing', value: breakdown.sharingScore },
-              { label: 'Sensitive Data', value: breakdown.sensitiveDataScore },
-              { label: 'Integrity', value: breakdown.integrityScore },
+              { label: 'Account', value: breakdown.accountScore, tips: healthTips.account },
+              { label: 'Passwords', value: breakdown.passwordScore, tips: healthTips.passwords },
+              { label: 'Sharing', value: breakdown.sharingScore, tips: healthTips.sharing },
+              { label: 'Sensitive Data', value: breakdown.sensitiveDataScore, tips: healthTips.sensitiveData },
+              { label: 'Integrity', value: breakdown.integrityScore, tips: healthTips.integrity },
             ].map((metric) => (
               <div key={metric.label} className="grid-breakdown-item">
-                <div className="grid-breakdown-label">{metric.label}</div>
+                <div className="grid-breakdown-label" style={{ overflow: 'visible' }}>
+                  {metric.label}
+                  <span style={{ display: 'inline-flex', verticalAlign: 'middle', marginLeft: '0.25rem' }}>
+                    <Tooltip
+                      maxWidth={200}
+                      content={
+                        metric.value >= 100 ? (
+                          `${metric.label} is at 100% — nothing to fix here.`
+                        ) : (
+                          <>
+                            <div style={{ fontWeight: 700, marginBottom: '0.25rem' }}>To reach 100%:</div>
+                            <ul style={{ margin: 0, paddingLeft: '1rem' }}>
+                              {metric.tips.map((tip) => (
+                                <li key={tip}>{tip}</li>
+                              ))}
+                            </ul>
+                          </>
+                        )
+                      }
+                    >
+                      <Info size={12} color="var(--color-text-subtle)" style={{ cursor: 'help' }} />
+                    </Tooltip>
+                  </span>
+                </div>
                 <div className="grid-breakdown-value" style={{ color: metric.value >= 80 ? 'var(--color-soft-green)' : metric.value >= 50 ? 'var(--color-amber)' : 'var(--color-rose)' }}>
                   {metric.value}%
                 </div>

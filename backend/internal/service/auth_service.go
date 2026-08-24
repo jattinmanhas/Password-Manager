@@ -546,6 +546,7 @@ func (s *AuthService) VerifyPasswordResetCode(ctx context.Context, email, code s
 		UserID:     record.UserID,
 		TokenHash:  util.HashToken(resetToken, s.pepper),
 		DeviceName: "password-reset",
+		Purpose:    domain.SessionPurposePasswordReset,
 		ExpiresAt:  expiresAt,
 	}); err != nil {
 		return "", time.Time{}, fmt.Errorf("create reset token session: %w", err)
@@ -560,7 +561,7 @@ func (s *AuthService) ResetPasswordViaEmail(ctx context.Context, resetToken, new
 	if util.TrimOrEmpty(resetToken) == "" {
 		return domain.LoginOutput{}, domain.ErrInvalidRecoveryToken
 	}
-	session, err := s.repo.GetActiveSessionByTokenHash(ctx, util.HashToken(resetToken, s.pepper))
+	session, err := s.repo.GetActiveResetSessionByTokenHash(ctx, util.HashToken(resetToken, s.pepper))
 	if err != nil {
 		if errors.Is(err, domain.ErrNotFound) {
 			return domain.LoginOutput{}, domain.ErrInvalidRecoveryToken

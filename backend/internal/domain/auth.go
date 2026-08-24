@@ -31,6 +31,17 @@ const (
 	EmailCodePurposeMFARecovery   = "mfa_recovery"
 )
 
+// Session purposes. A session's purpose scopes what it may authorize.
+const (
+	// SessionPurposeAuth is a normal login session, accepted by the auth
+	// middleware on all authenticated endpoints.
+	SessionPurposeAuth = "auth"
+	// SessionPurposePasswordReset is a short-lived session issued after an email
+	// reset code is verified. It may ONLY be used to complete the password reset
+	// and is rejected by the auth middleware.
+	SessionPurposePasswordReset = "password_reset"
+)
+
 type EmailVerificationCodeInput struct {
 	ID        string
 	UserID    string
@@ -125,7 +136,11 @@ type CreateSessionInput struct {
 	DeviceName string
 	IPAddr     string
 	UserAgent  string
-	ExpiresAt  time.Time
+	// Purpose scopes the session. Empty defaults to "auth" (a normal login
+	// session). "password_reset" sessions are only accepted by the reset-confirm
+	// flow and are rejected by the auth middleware.
+	Purpose   string
+	ExpiresAt time.Time
 }
 
 type TOTPState struct {
@@ -149,6 +164,7 @@ type AuthRepository interface {
 	GetUserAuthByEmail(ctx context.Context, email string) (UserAuthRecord, error)
 	CreateSession(ctx context.Context, input CreateSessionInput) error
 	GetActiveSessionByTokenHash(ctx context.Context, tokenHash []byte) (Session, error)
+	GetActiveResetSessionByTokenHash(ctx context.Context, tokenHash []byte) (Session, error)
 	RevokeSessionByTokenHash(ctx context.Context, tokenHash []byte) (bool, error)
 	RevokeAllUserSessions(ctx context.Context, userID string) (int64, error)
 	SetTOTPSecret(ctx context.Context, userID string, secretEnc []byte) (bool, error)

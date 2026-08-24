@@ -54,6 +54,12 @@ func (m *mockAuthRepo) GetActiveSessionByTokenHash(ctx context.Context, tokenHas
 	}
 	return domain.Session{}, domain.ErrNotFound
 }
+func (m *mockAuthRepo) GetActiveResetSessionByTokenHash(ctx context.Context, tokenHash []byte) (domain.Session, error) {
+	if m.getActiveSessionFn != nil {
+		return m.getActiveSessionFn(ctx, tokenHash)
+	}
+	return domain.Session{}, domain.ErrNotFound
+}
 func (m *mockAuthRepo) RevokeSessionByTokenHash(ctx context.Context, tokenHash []byte) (bool, error) {
 	if m.revokeSessionFn != nil {
 		return m.revokeSessionFn(ctx, tokenHash)
